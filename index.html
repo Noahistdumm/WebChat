@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebChat Deluxe V1.2.4</title>
+<title>WebChat Deluxe V1.2.5</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.2.4</h2>
+    <h2>WebChat Deluxe V1.2.5</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -76,7 +76,7 @@ const firebaseConfig = {
   authDomain: "webchat-a47cc.firebaseapp.com",
   databaseURL: "https://webchat-a47cc-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "webchat-a47cc",
-  storageBucket: "webchat-a47cc.firebasestorage.app",
+  storageBucket: "webchat-a47cc.appspot.com",
   messagingSenderId: "318380716143",
   appId: "1:318380716143:web:da7474bfa392dfeaccdd9a",
   measurementId: "G-GBFBS5F8GB"
@@ -107,14 +107,7 @@ const imageInput = document.getElementById('imageInput');
 const sendImageBtn = document.getElementById('sendImageBtn');
 const previewImg = document.getElementById('previewImg');
 
-let me = null;
-let selectedPeer = null;
-let unreadCounts = {};
-let pc = null;
-let localStream = null;
-let callDoc = null;
-
-// --- Sounds direkt von Website ---
+// --- Sounds ---
 const outgoingCallSound = new Audio('https://www.soundjay.com/phone/phone-dial-01.mp3');
 outgoingCallSound.loop = true;
 const incomingCallSound = new Audio('https://www.soundjay.com/phone/phone-ring-01.mp3');
@@ -135,6 +128,14 @@ function showNotification(title, body){
   new Notification(title,{body});
   messageSound.play().catch(()=>{});
 }
+
+// --- User & Chat ---
+let me = null;
+let selectedPeer = null;
+let unreadCounts = {};
+let pc = null;
+let localStream = null;
+let callDoc = null;
 
 // --- Auth State ---
 onAuthStateChanged(auth, async user => {
@@ -171,7 +172,7 @@ window.login=async()=>{
 };
 window.logout=async()=>{ await signOut(auth); selectedPeer=null; chatBox.innerHTML=''; };
 
-// --- Kontakte laden ---
+// --- Kontakte ---
 async function loadContacts(){
   contactsDiv.innerHTML='';
   const q=query(collection(db,'users'));
@@ -198,7 +199,7 @@ async function loadContacts(){
   });
 }
 
-// --- Gruppen laden ---
+// --- Gruppen ---
 async function loadGroups(){
   groupsDiv.innerHTML='';
   const q=query(collection(db,'groups'),where('members','array-contains',me.uid));
@@ -223,7 +224,7 @@ async function loadGroups(){
   });
 }
 
-// --- Chat laden & Buttons ---
+// --- Chat laden ---
 async function loadChat(){
   if(!selectedPeer){ chatTitle.textContent='Wähle einen Chat'; callButtons.style.display='none'; return; }
   chatTitle.textContent=selectedPeer.name;
@@ -304,7 +305,6 @@ window.sendImage=async()=>{
   await addDoc(collection(db,'messages'),{from:me.uid,to:selectedPeer.id,type:'image',url,timestamp:Date.now()});
   imageInput.value=''; previewImg.style.display='none';
 };
-
 sendImageBtn.addEventListener('click',sendImage);
 
 // --- Unread Badge ---
@@ -313,18 +313,28 @@ function updateUnreadBadge(chatId){
   if(span) span.textContent=unreadCounts[chatId]||'';
 }
 
-// --- WebRTC Anrufe ---
+// --- WebRTC Calls ---
 async function startCall(video=false){
   if(!selectedPeer) return alert("Wähle zuerst einen Chat aus!");
   videoContainer.style.display=video?"flex":"none";
   outgoingCallSound.play().catch(()=>{});
 
-  localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:video});
-  localVideo.srcObject = localStream;
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:video});
+    localVideo.srcObject = localStream;
+  } catch(err) {
+    console.error("Kamera/Mikrofon Fehler:", err);
+    alert("Kamera oder Mikrofon konnte nicht geöffnet werden!");
+    return;
+  }
 
-  pc = new RTCPeerConnection();
+  pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-  pc.ontrack = e => { remoteVideo.srcObject = e.streams[0]; };
+
+  pc.ontrack = e => {
+    console.log("Remote Stream:", e.streams[0]);
+    remoteVideo.srcObject = e.streams[0];
+  };
 
   const callRef = doc(collection(db,"calls"));
   callDoc = callRef;
@@ -335,20 +345,21 @@ async function startCall(video=false){
 
   const offerDesc = await pc.createOffer();
   await pc.setLocalDescription(offerDesc);
-  const offer = { sdp: offerDesc.sdp, type: offerDesc.type };
-  await setDoc(callRef,{offer,from:me.uid,to:selectedPeer.id,active:true,video});
+  await setDoc(callRef,{offer:{sdp:offerDesc.sdp,type:offerDesc.type},from:me.uid,to:selectedPeer.id,active:true,video});
 
-  // Stop outgoing sound, sobald angenommen
   onSnapshot(callRef,async snap=>{
     const data = snap.data();
     if(!pc.currentRemoteDescription && data?.answer){
+      console.log("Answer empfangen:", data.answer);
       await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
       outgoingCallSound.pause(); outgoingCallSound.currentTime=0;
     }
   });
 
   onSnapshot(answerCandidates,snap=>{
-    snap.docChanges().forEach(change=>{if(change.type==="added") pc.addIceCandidate(new RTCIceCandidate(change.doc.data()));});
+    snap.docChanges().forEach(change=>{
+      if(change.type==="added") pc.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+    });
   });
 
   audioCallBtn.style.display="none";
@@ -364,57 +375,42 @@ async function endCall(){
   audioCallBtn.style.display="inline-block";
   videoCallBtn.style.display="inline-block";
   endCallBtn.style.display="none";
-
   outgoingCallSound.pause(); outgoingCallSound.currentTime=0;
   incomingCallSound.pause(); incomingCallSound.currentTime=0;
-
-  if(callDoc){
-    await updateDoc(callDoc, {active:false});
-    callDoc=null;
-  }
+  if(callDoc){ await updateDoc(callDoc,{active:false}); callDoc=null; }
 }
 
 audioCallBtn.onclick = () => startCall(false);
 videoCallBtn.onclick = () => startCall(true);
 endCallBtn.onclick = () => endCall();
 
-// --- Eingehende Anrufe ---
+// --- Incoming Calls ---
 onSnapshot(collection(db,"calls"),snapshot=>{
   snapshot.docChanges().forEach(async change=>{
     const data = change.doc.data();
     const docRef = change.doc.ref;
-
     if(change.type==="added" && data.to===me?.uid && !pc && data.active){
       incomingCallSound.play().catch(()=>{});
-
       const accept = confirm(`${data.video ? "Video" : "Audio"}-Anruf von ${data.from}. Annehmen?`);
-      
-      if(!accept){
-        incomingCallSound.pause();
-        incomingCallSound.currentTime = 0;
-        await updateDoc(docRef, {active:false});
-        return;
-      }
+      if(!accept){ incomingCallSound.pause(); incomingCallSound.currentTime=0; await updateDoc(docRef,{active:false}); return; }
+      incomingCallSound.pause(); incomingCallSound.currentTime=0;
 
-      incomingCallSound.pause();
-      incomingCallSound.currentTime = 0;
+      pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
 
-      pc = new RTCPeerConnection();
-      localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:data.video});
-      localVideo.srcObject = localStream;
-      videoContainer.style.display = data.video ? "flex" : "none";
+      try { localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:data.video}); localVideo.srcObject = localStream; } 
+      catch(err){ console.error("Kamera/Mikrofon Fehler:", err); alert("Kamera oder Mikrofon konnte nicht geöffnet werden!"); return; }
 
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-      pc.ontrack = e => { remoteVideo.srcObject = e.streams[0]; };
+      pc.ontrack = e => { console.log("Remote Stream empfangen:", e.streams[0]); remoteVideo.srcObject = e.streams[0]; };
+      videoContainer.style.display = data.video ? "flex" : "none";
 
       const answerCandidates = collection(docRef,"answerCandidates");
-      pc.onicecandidate = e => { if(e.candidate) addDoc(answerCandidates, e.candidate.toJSON()); };
+      pc.onicecandidate = e => { if(e.candidate) addDoc(answerCandidates,e.candidate.toJSON()); };
 
       await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
       const answerDesc = await pc.createAnswer();
       await pc.setLocalDescription(answerDesc);
-      const answer = { type: answerDesc.type, sdp: answerDesc.sdp };
-      await updateDoc(docRef, {answer, active:true});
+      await updateDoc(docRef,{answer:{type:answerDesc.type,sdp:answerDesc.sdp},active:true});
 
       callDoc = docRef;
       audioCallBtn.style.display="none";
@@ -424,8 +420,7 @@ onSnapshot(collection(db,"calls"),snapshot=>{
   });
 });
 </script>
-
-
+p
 
 
 </body>
