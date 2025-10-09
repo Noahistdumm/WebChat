@@ -117,21 +117,19 @@ let callDoc = null;
 // --- Sounds direkt von Website ---
 const outgoingCallSound = new Audio('https://www.soundjay.com/phone/phone-dial-01.mp3');
 outgoingCallSound.loop = true;
-
 const incomingCallSound = new Audio('https://www.soundjay.com/phone/phone-ring-01.mp3');
 incomingCallSound.loop = true;
-
-// --- Notification & Sound ---
-let notifyAllowed = false;
 const messageSound = new Audio('https://www.soundjay.com/button/beep-07.mp3');
 
+// --- Notification ---
+let notifyAllowed = false;
 async function requestNotificationPermission(){
   if(!("Notification" in window)) return false;
   if(Notification.permission==="granted") return true;
   const permission = await Notification.requestPermission();
   return permission==="granted";
 }
-requestNotificationPermission().then(granted=>notifyAllowed=granted);
+requestNotificationPermission().then(granted => notifyAllowed = granted);
 function showNotification(title, body){
   if(!notifyAllowed) return;
   new Notification(title,{body});
@@ -139,9 +137,9 @@ function showNotification(title, body){
 }
 
 // --- Auth State ---
-onAuthStateChanged(auth, async user=>{
+onAuthStateChanged(auth, async user => {
   if(user){
-    me = { uid:user.uid, email:user.email, name:user.email.split('@')[0] };
+    me = { uid: user.uid, email: user.email, name: user.email.split('@')[0] };
     await setDoc(doc(db,'users',me.uid), me, {merge:true});
     authArea.style.display='none';
     userArea.style.display='block';
@@ -225,7 +223,7 @@ async function loadGroups(){
   });
 }
 
-// --- Chat laden & Buttons sichtbar machen ---
+// --- Chat laden & Buttons ---
 async function loadChat(){
   if(!selectedPeer){ chatTitle.textContent='Wähle einen Chat'; callButtons.style.display='none'; return; }
   chatTitle.textContent=selectedPeer.name;
@@ -315,65 +313,37 @@ function updateUnreadBadge(chatId){
   if(span) span.textContent=unreadCounts[chatId]||'';
 }
 
-// --- Kontakte hinzufügen ---
-window.addContactByName=async()=>{
-  const name=document.getElementById('addContactInput').value.trim();
-  if(!name){alert('Name angeben'); return;}
-  const q=query(collection(db,'users'),where('name','==',name));
-  const snap=await getDocs(q);
-  if(snap.empty){alert('Nutzer nicht gefunden'); return;}
-  alert('Kontakt kann jetzt für private Gruppen genutzt werden.');
-};
-
-// --- Gruppen erstellen ---
-window.createGroup=async()=>{
-  const name=document.getElementById('newGroupName').value.trim();
-  if(!name) return alert('Gruppenname angeben');
-  const emails=prompt("E-Mail-Adressen der Mitglieder (komma-getrennt)").split(',').map(s=>s.trim());
-  const membersUIDs=[];
-  for(const email of emails){
-    const q=query(collection(db,'users'),where('email','==',email));
-    const snap=await getDocs(q);
-    if(!snap.empty) membersUIDs.push(snap.docs[0].id);
-  }
-  membersUIDs.push(me.uid);
-  await addDoc(collection(db,'groups'),{name,members:membersUIDs});
-  loadGroups();
-  alert('Private Gruppe erstellt!');
-};
-
 // --- WebRTC Anrufe ---
 async function startCall(video=false){
   if(!selectedPeer) return alert("Wähle zuerst einen Chat aus!");
   videoContainer.style.display=video?"flex":"none";
-
   outgoingCallSound.play().catch(()=>{});
 
-  localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:video});
-  localVideo.srcObject=localStream;
+  localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:video});
+  localVideo.srcObject = localStream;
 
-  pc=new RTCPeerConnection();
-  localStream.getTracks().forEach(track=>pc.addTrack(track,localStream));
+  pc = new RTCPeerConnection();
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  pc.ontrack = e => { remoteVideo.srcObject = e.streams[0]; };
 
-  pc.ontrack=e=>{remoteVideo.srcObject=e.streams[0];};
+  const callRef = doc(collection(db,"calls"));
+  callDoc = callRef;
+  const offerCandidates = collection(callRef,"offerCandidates");
+  const answerCandidates = collection(callRef,"answerCandidates");
 
-  const callRef=doc(collection(db,"calls"));
-  callDoc=callRef;
-  const offerCandidates=collection(callRef,"offerCandidates");
-  const answerCandidates=collection(callRef,"answerCandidates");
+  pc.onicecandidate = e => { if(e.candidate) addDoc(offerCandidates, e.candidate.toJSON()); };
 
-  pc.onicecandidate=e=>{if(e.candidate) addDoc(offerCandidates,e.candidate.toJSON());};
-
-  const offerDesc=await pc.createOffer();
+  const offerDesc = await pc.createOffer();
   await pc.setLocalDescription(offerDesc);
-  const offer={sdp:offerDesc.sdp,type:offerDesc.type};
+  const offer = { sdp: offerDesc.sdp, type: offerDesc.type };
   await setDoc(callRef,{offer,from:me.uid,to:selectedPeer.id,active:true,video});
 
+  // Stop outgoing sound, sobald angenommen
   onSnapshot(callRef,async snap=>{
-    const data=snap.data();
+    const data = snap.data();
     if(!pc.currentRemoteDescription && data?.answer){
       await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-      outgoingCallSound.pause(); outgoingCallSound.currentTime = 0;
+      outgoingCallSound.pause(); outgoingCallSound.currentTime=0;
     }
   });
 
@@ -389,48 +359,72 @@ async function startCall(video=false){
 async function endCall(){
   if(pc) pc.close();
   if(localStream) localStream.getTracks().forEach(t=>t.stop());
-  pc=null; localStream=null;
+  pc = null; localStream = null;
   videoContainer.style.display="none";
   audioCallBtn.style.display="inline-block";
   videoCallBtn.style.display="inline-block";
+  endCallBtn.style.display="none";
 
   outgoingCallSound.pause(); outgoingCallSound.currentTime=0;
   incomingCallSound.pause(); incomingCallSound.currentTime=0;
+
+  if(callDoc){
+    await updateDoc(callDoc, {active:false});
+    callDoc=null;
+  }
 }
 
-audioCallBtn.onclick=()=>startCall(false);
-videoCallBtn.onclick=()=>startCall(true);
-endCallBtn.onclick=()=>endCall();
+audioCallBtn.onclick = () => startCall(false);
+videoCallBtn.onclick = () => startCall(true);
+endCallBtn.onclick = () => endCall();
 
-// Eingehende Anrufe
+// --- Eingehende Anrufe ---
 onSnapshot(collection(db,"calls"),snapshot=>{
   snapshot.docChanges().forEach(async change=>{
-    const data=change.doc.data();
-    if(change.type==="added" && data.to===me?.uid && !pc){
+    const data = change.doc.data();
+    const docRef = change.doc.ref;
+
+    if(change.type==="added" && data.to===me?.uid && !pc && data.active){
       incomingCallSound.play().catch(()=>{});
 
-      const accept=confirm(`${data.video?"Video":"Audio"}-Anruf von ${data.from}. Annehmen?`);
-      if(!accept) { incomingCallSound.pause(); incomingCallSound.currentTime=0; return; }
+      const accept = confirm(`${data.video ? "Video" : "Audio"}-Anruf von ${data.from}. Annehmen?`);
+      
+      if(!accept){
+        incomingCallSound.pause();
+        incomingCallSound.currentTime = 0;
+        await updateDoc(docRef, {active:false});
+        return;
+      }
 
-      incomingCallSound.pause(); incomingCallSound.currentTime=0;
+      incomingCallSound.pause();
+      incomingCallSound.currentTime = 0;
 
-      pc=new RTCPeerConnection();
-      localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:data.video});
-      localVideo.srcObject=localStream;
-      videoContainer.style.display=data.video?"flex":"none";
-      localStream.getTracks().forEach(track=>pc.addTrack(track,localStream));
-      pc.ontrack=e=>{remoteVideo.srcObject=e.streams[0];};
-      const answerCandidates=collection(change.doc.ref,"answerCandidates");
-      pc.onicecandidate=e=>{if(e.candidate) addDoc(answerCandidates,e.candidate.toJSON());};
+      pc = new RTCPeerConnection();
+      localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:data.video});
+      localVideo.srcObject = localStream;
+      videoContainer.style.display = data.video ? "flex" : "none";
+
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      pc.ontrack = e => { remoteVideo.srcObject = e.streams[0]; };
+
+      const answerCandidates = collection(docRef,"answerCandidates");
+      pc.onicecandidate = e => { if(e.candidate) addDoc(answerCandidates, e.candidate.toJSON()); };
+
       await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-      const answerDesc=await pc.createAnswer();
+      const answerDesc = await pc.createAnswer();
       await pc.setLocalDescription(answerDesc);
-      const answer={type:answerDesc.type,sdp:answerDesc.sdp};
-      await updateDoc(change.doc.ref,{answer});
+      const answer = { type: answerDesc.type, sdp: answerDesc.sdp };
+      await updateDoc(docRef, {answer, active:true});
+
+      callDoc = docRef;
+      audioCallBtn.style.display="none";
+      videoCallBtn.style.display="none";
+      endCallBtn.style.display="inline-block";
     }
   });
 });
 </script>
+
 
 
 
