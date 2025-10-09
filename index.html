@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebChat Deluxe V1.1.8</title>
+<title>WebChat Deluxe V1.1.9</title>
 <style>
   body { font-family: Arial,sans-serif; background:#f1f5f9; margin:0; padding:0; }
   .container { display:flex; max-width:1200px; margin:20px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
@@ -18,15 +18,16 @@
   .sent{background:#dbeafe;align-self:flex-end;}
   .received{background:#f3f4f6;align-self:flex-start;}
   img.chat-img{max-width:200px;border-radius:6px;}
-  .sidebar div{margin-bottom:4px;}
-  .sidebar div:hover{background:#f3f4f6; cursor:pointer;}
+  #previewImg { max-width:100px; max-height:100px; margin-top:4px; border-radius:6px; }
+  .sidebar div{margin-bottom:4px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;}
+  .sidebar div:hover{background:#f3f4f6;}
 </style>
 </head>
 <body>
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.1.8</h2>
+    <h2>WebChat Deluxe V1.1.9</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -53,11 +54,14 @@
   <div class="main">
     <div id="chatHeader"><h3>Bitte anmelden</h3></div>
     <div id="chatBox" class="chat-box"></div>
-    <div style="display:flex;gap:8px;margin-top:8px;">
-      <input id="messageInput" placeholder="Nachricht..." style="flex:1">
-      <input type="file" id="imageInput" accept="image/*">
-      <button type="button" onclick="sendMessage()">Senden</button>
-      <button type="button" id="sendImageBtn">Bild senden</button>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;">
+      <div style="display:flex;gap:8px;">
+        <input id="messageInput" placeholder="Nachricht..." style="flex:1">
+        <input type="file" id="imageInput" accept="image/*">
+        <button type="button" onclick="sendMessage()">Senden</button>
+        <button type="button" id="sendImageBtn">Bild senden</button>
+      </div>
+      <img id="previewImg" style="display:none;">
     </div>
   </div>
 </div>
@@ -95,19 +99,18 @@ const chatHeader = document.getElementById('chatHeader');
 const messageInput = document.getElementById('messageInput');
 const imageInput = document.getElementById('imageInput');
 const sendImageBtn = document.getElementById('sendImageBtn');
+const previewImg = document.getElementById('previewImg');
 
 let me = null;
 let selectedPeer = null;
+let unreadCounts = {}; // { chatId: Zahl }
 
 // --- Notifications + Sound ---
 let notifyAllowed = false;
 const messageSound = new Audio('https://www.soundjay.com/button/beep-07.mp3');
 
 async function requestNotificationPermission() {
-    if (!("Notification" in window)) {
-        alert("Dieser Browser unterstützt keine Benachrichtigungen.");
-        return false;
-    }
+    if (!("Notification" in window)) return false;
     if (Notification.permission === "granted") return true;
     const permission = await Notification.requestPermission();
     return permission === "granted";
@@ -117,7 +120,12 @@ requestNotificationPermission().then(granted => { notifyAllowed = granted; });
 function showNotification(title, body) {
     if (!notifyAllowed) return;
     new Notification(title, { body });
-    messageSound.play().catch(e => console.log("Sound konnte nicht abgespielt werden:", e));
+    messageSound.play().catch(e => console.log(e));
+}
+
+function updateUnreadBadge(chatId){
+    const span = document.getElementById(`unread-${chatId}`);
+    if(span) span.textContent = unreadCounts[chatId] || '';
 }
 
 // --- Auth State ---
@@ -164,8 +172,20 @@ async function loadContacts(){
         const u=docu.data();
         if(u.uid!==me.uid){
             const div=document.createElement('div');
-            div.textContent=u.name;
-            div.onclick=()=>{ selectedPeer={type:'user',id:u.uid,name:u.name}; loadChat(); };
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = u.name;
+            const countSpan = document.createElement('span');
+            countSpan.style.color = 'red';
+            countSpan.id = `unread-${u.uid}`;
+            countSpan.textContent = unreadCounts[u.uid] || '';
+            div.appendChild(nameSpan);
+            div.appendChild(countSpan);
+            div.onclick = () => {
+                selectedPeer={type:'user',id:u.uid,name:u.name};
+                unreadCounts[u.uid]=0;
+                updateUnreadBadge(u.uid);
+                loadChat();
+            };
             contactsDiv.appendChild(div);
         }
     });
@@ -179,8 +199,20 @@ async function loadGroups(){
     snap.forEach(docu=>{
         const g=docu.data();
         const div=document.createElement('div');
-        div.textContent=g.name;
-        div.onclick=()=>{ selectedPeer={type:'group',id:docu.id,name:g.name}; loadChat(); };
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = g.name;
+        const countSpan = document.createElement('span');
+        countSpan.style.color='red';
+        countSpan.id = `unread-${docu.id}`;
+        countSpan.textContent = unreadCounts[docu.id] || '';
+        div.appendChild(nameSpan);
+        div.appendChild(countSpan);
+        div.onclick = () => {
+            selectedPeer={type:'group',id:docu.id,name:g.name};
+            unreadCounts[docu.id]=0;
+            updateUnreadBadge(docu.id);
+            loadChat();
+        };
         groupsDiv.appendChild(div);
     });
 }
@@ -232,11 +264,17 @@ async function loadChat(){
                 if((m.from===me.uid && m.to===selectedPeer.id)||(m.from===selectedPeer.id && m.to===me.uid)){
                     renderMessage(m);
                     if(m.from !== me.uid) showNotification(selectedPeer.name, m.type==='text'?m.text:"Bildnachricht");
+                } else if(m.from !== me.uid && m.to === me.uid) {
+                    unreadCounts[m.from] = (unreadCounts[m.from] || 0) + 1;
+                    updateUnreadBadge(m.from);
                 }
             } else if(selectedPeer.type==='group'){
-                if(m.to===selectedPeer.id) {
+                if(m.to===selectedPeer.id){
                     renderMessage(m);
                     if(m.from !== me.uid) showNotification(selectedPeer.name, m.type==='text'?m.text:"Bildnachricht");
+                } else if(m.to === m.to && m.from !== me.uid) {
+                    unreadCounts[m.to] = (unreadCounts[m.to] || 0) + 1;
+                    updateUnreadBadge(m.to);
                 }
             }
         });
@@ -268,35 +306,31 @@ window.sendMessage = async ()=>{
     messageInput.value='';
 };
 
-// --- Bild senden direkt ---
+// --- Bild senden mit Vorschau ---
+imageInput.addEventListener('change', ()=>{
+    const file = imageInput.files[0];
+    if(file){
+        previewImg.src = URL.createObjectURL(file);
+        previewImg.style.display = 'block';
+    } else previewImg.style.display='none';
+});
+
 window.sendImage = async () => {
     if(!selectedPeer){alert('Chat auswählen'); return;}
     const file = imageInput.files[0];
     if(!file){alert('Keine Datei gewählt'); return;}
-    
     try {
         const cleanName = file.name.replace(/[^\w.-]/g, "_");
         const storageRef = ref(storage, `chatImages/${me.uid}_${Date.now()}_${cleanName}`);
         const snapshot = await uploadBytes(storageRef, file);
         const url = await getDownloadURL(snapshot.ref);
-
-        await addDoc(collection(db,'messages'), {
-            from: me.uid,
-            to: selectedPeer.id,
-            type: 'image',
-            url,
-            timestamp: Date.now()
-        });
-        imageInput.value = '';
-    } catch(err) {
-        console.error(err);
-        alert("Fehler beim Upload: " + err.message);
-    }
+        await addDoc(collection(db,'messages'), {from: me.uid, to: selectedPeer.id, type: 'image', url, timestamp: Date.now()});
+        imageInput.value=''; previewImg.style.display='none';
+    } catch(err){console.error(err); alert("Fehler beim Upload: " + err.message);}
 };
 
 sendImageBtn.addEventListener('click', sendImage);
 
 </script>
-
 </body>
 </html>
