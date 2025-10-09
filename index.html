@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>WebChat Deluxe</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebChat Deluxe V1.1</title>
 <style>
   body { font-family: Arial,sans-serif; background:#f1f5f9; margin:0; padding:0; }
   .container { display:flex; max-width:1200px; margin:20px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
@@ -24,10 +24,10 @@
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe</h2>
+    <h2>WebChat Deluxe V1.1</h2>
     <div id="authArea">
-      <input type="email" id="email" placeholder="E-Mail"/><br/><br/>
-      <input type="password" id="password" placeholder="Passwort"/><br/><br/>
+      <input type="email" id="email" placeholder="E-Mail"><br><br>
+      <input type="password" id="password" placeholder="Passwort"><br><br>
       <button type="button" onclick="signup()">Registrieren</button>
       <button type="button" style="margin-top:8px;background:#059669" onclick="login()">Anmelden</button>
     </div>
@@ -38,12 +38,12 @@
       <hr/>
       <h4>Kontakte</h4>
       <div id="contacts"></div>
-      <input id="addContactInput" placeholder="Name hinzufügen"/><br/>
+      <input id="addContactInput" placeholder="Name hinzufügen"><br>
       <button type="button" style="margin-top:6px" onclick="addContactByName()">Hinzufügen</button>
       <hr/>
       <h4>Gruppen</h4>
       <div id="groups"></div>
-      <input id="newGroupName" placeholder="Gruppenname"/><br/>
+      <input id="newGroupName" placeholder="Gruppenname"><br>
       <button type="button" style="margin-top:6px" onclick="createGroup()">Erstellen</button>
     </div>
   </div>
@@ -52,10 +52,10 @@
     <div id="chatHeader"><h3>Bitte anmelden</h3></div>
     <div id="chatBox" class="chat-box"></div>
     <div style="display:flex;gap:8px;margin-top:8px;">
-      <input id="messageInput" placeholder="Nachricht..." style="flex:1"/>
-      <input type="file" id="imageInput"/>
+      <input id="messageInput" placeholder="Nachricht..." style="flex:1">
+      <input type="file" id="imageInput">
       <button type="button" onclick="sendMessage()">Senden</button>
-      <button type="button" onclick="sendImage()">Bild senden</button>
+      <button type="button" id="sendImageBtn">Bild senden</button>
     </div>
   </div>
 </div>
@@ -92,6 +92,7 @@ const chatBox = document.getElementById('chatBox');
 const chatHeader = document.getElementById('chatHeader');
 const messageInput = document.getElementById('messageInput');
 const imageInput = document.getElementById('imageInput');
+const sendImageBtn = document.getElementById('sendImageBtn');
 
 let me = null;
 let selectedPeer = null;
@@ -131,7 +132,7 @@ window.login = async ()=>{
 };
 window.logout = async ()=>{ await signOut(auth); selectedPeer=null; chatBox.innerHTML=''; };
 
-// --- Kontakte ---
+// --- Kontakte laden ---
 async function loadContacts(){
     contactsDiv.innerHTML='';
     const q=query(collection(db,'users'));
@@ -148,7 +149,7 @@ async function loadContacts(){
     });
 }
 
-// --- Gruppen ---
+// --- Gruppen laden ---
 async function loadGroups(){
     groupsDiv.innerHTML='';
     const q=query(collection(db,'groups'), where('members','array-contains',me.uid));
@@ -173,7 +174,7 @@ window.addContactByName = async ()=>{
     alert('Kontakt kann jetzt für private Gruppen genutzt werden.');
 };
 
-// --- Gruppen erstellen (private) ---
+// --- Gruppen erstellen ---
 window.createGroup = async ()=>{
     const name = document.getElementById('newGroupName').value.trim();
     if(!name) return alert('Gruppenname angeben');
@@ -184,7 +185,7 @@ window.createGroup = async ()=>{
         const snap = await getDocs(q);
         if(!snap.empty) membersUIDs.push(snap.docs[0].id);
     }
-    membersUIDs.push(me.uid); // dich selbst hinzufügen
+    membersUIDs.push(me.uid);
     await addDoc(collection(db,'groups'), {name, members: membersUIDs});
     loadGroups();
     alert('Private Gruppe erstellt!');
@@ -208,37 +209,32 @@ async function loadChat(){
             const m=docu.data();
             if(selectedPeer.type==='user'){
                 if((m.from===me.uid && m.to===selectedPeer.id)||(m.from===selectedPeer.id && m.to===me.uid)){
-                    if(m.type==='image'){
-                        const img=document.createElement('img');
-                        img.src=m.url;
-                        img.className='chat-img message '+(m.from===me.uid?'sent':'received');
-                        chatBox.appendChild(img);
-                    } else {
-                        const div=document.createElement('div');
-                        div.textContent=m.text;
-                        div.className='message '+(m.from===me.uid?'sent':'received');
-                        chatBox.appendChild(div);
-                    }
+                    renderMessage(m);
                 }
             } else if(selectedPeer.type==='group'){
-                if(m.type==='image'){
-                    const img=document.createElement('img');
-                    img.src=m.url;
-                    img.className='chat-img message '+(m.from===me.uid?'sent':'received');
-                    chatBox.appendChild(img);
-                } else {
-                    const div=document.createElement('div');
-                    div.textContent=m.text;
-                    div.className='message '+(m.from===me.uid?'sent':'received');
-                    chatBox.appendChild(div);
-                }
+                if(m.to===selectedPeer.id) renderMessage(m);
             }
         });
         chatBox.scrollTop=chatBox.scrollHeight;
     });
 }
 
-// --- Nachrichten senden ---
+// --- Nachrichten rendern ---
+function renderMessage(m){
+    if(m.type==='image'){
+        const img=document.createElement('img');
+        img.src=m.url;
+        img.className='chat-img message '+(m.from===me.uid?'sent':'received');
+        chatBox.appendChild(img);
+    } else {
+        const div=document.createElement('div');
+        div.textContent=m.text;
+        div.className='message '+(m.from===me.uid?'sent':'received');
+        chatBox.appendChild(div);
+    }
+}
+
+// --- Text senden ---
 window.sendMessage = async ()=>{
     if(!selectedPeer){alert('Chat auswählen'); return;}
     const text=messageInput.value.trim();
@@ -247,7 +243,7 @@ window.sendMessage = async ()=>{
     messageInput.value='';
 };
 
-// --- Bilder senden ---
+// --- Bild senden ---
 window.sendImage = async ()=>{
     if(!selectedPeer){alert('Chat auswählen'); return;}
     const file=imageInput.files[0];
@@ -258,12 +254,16 @@ window.sendImage = async ()=>{
         const url = await getDownloadURL(storageRef);
         await addDoc(collection(db,'messages'), {from:me.uid,to:selectedPeer.id,type:'image',url,timestamp:Date.now()});
         imageInput.value='';
-    } catch(e){ console.error(e); alert('Fehler beim Hochladen'); }
+    } catch(e){console.error(e); alert('Fehler beim Hochladen');}
 };
+
+// --- Button EventListener (optional) ---
+sendImageBtn.addEventListener('click', sendImage);
 </script>
 
 </body>
 </html>
+
 
 
 
