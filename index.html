@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebChat</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f1f5f9;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      display: flex;
+      max-width: 1200px;
+      margin: 20px auto;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .sidebar {
+      width: 300px;
+      border-right: 1px solid #ddd;
+      padding: 16px;
+      background-color: #fff;
+    }
+    .main {
+      flex: 1;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    h2 { margin-top: 0; }
+    input, button, select {
+      padding: 8px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+    }
+    button {
+      cursor: pointer;
+      background-color: #2563eb;
+      color: white;
+      border: none;
+    }
+    button:hover {
+      background-color: #1e40af;
+    }
+    .message {
+      margin: 6px 0;
+      padding: 6px 8px;
+      border-radius: 6px;
+      max-width: 70%;
+    }
+    .message.sent {
+      background: #dbeafe;
+      align-self: flex-end;
+    }
+    .message.received {
+      background: #f3f4f6;
+      align-self: flex-start;
+    }
+    .chat-box {
+      flex: 1;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 8px;
+      background: #fafafa;
+      display: flex;
+      flex-direction: column;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="sidebar">
+      <h2>WebChat</h2>
+      <div id="auth">
+        <input type="text" id="username" placeholder="Name eingeben" />
+        <button onclick="registerUser()">Registrieren</button>
+        <button onclick="loginUser()">Anmelden</button>
+      </div>
+      <div id="userInfo" style="display:none;">
+        <p id="currentUser"></p>
+        <button onclick="logoutUser()" style="background-color:#dc2626">Abmelden</button>
+        <hr>
+        <h4>Kontakte</h4>
+        <div id="contacts"></div>
+        <input type="text" id="addContactName" placeholder="Namen eingeben" />
+        <button onclick="addContact()">Hinzufügen</button>
+        <hr>
+        <h4>Gruppen</h4>
+        <div id="groups"></div>
+        <input type="text" id="newGroupName" placeholder="Gruppenname" />
+        <button onclick="createGroup()">Erstellen</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div id="chatHeader"><h3>Bitte anmelden</h3></div>
+      <div id="chatBox" class="chat-box"></div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <input id="messageInput" placeholder="Nachricht..." style="flex:1" />
+        <button onclick="sendMessage()">Senden</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let users = JSON.parse(localStorage.getItem('wc_users')||'[]');
+    let messages = JSON.parse(localStorage.getItem('wc_messages')||'[]');
+    let groups = JSON.parse(localStorage.getItem('wc_groups')||'[]');
+    let currentUser = JSON.parse(localStorage.getItem('wc_currentUser')||'null');
+    let selectedPeer = null;
+
+    function save() {
+      localStorage.setItem('wc_users', JSON.stringify(users));
+      localStorage.setItem('wc_messages', JSON.stringify(messages));
+      localStorage.setItem('wc_groups', JSON.stringify(groups));
+      localStorage.setItem('wc_currentUser', JSON.stringify(currentUser));
+    }
+
+    function render() {
+      const auth = document.getElementById('auth');
+      const info = document.getElementById('userInfo');
+      const chatHeader = document.getElementById('chatHeader');
+      const chatBox = document.getElementById('chatBox');
+      const contactsDiv = document.getElementById('contacts');
+      const groupsDiv = document.getElementById('groups');
+      chatBox.innerHTML = '';
+      if (!currentUser) {
+        auth.style.display = 'block';
+        info.style.display = 'none';
+        chatHeader.innerHTML = '<h3>Bitte anmelden</h3>';
+        return;
+      }
+      auth.style.display = 'none';
+      info.style.display = 'block';
+      document.getElementById('currentUser').textContent = 'Angemeldet als ' + currentUser.name;
+      contactsDiv.innerHTML = '';
+      (currentUser.contacts||[]).forEach(id => {
+        const u = users.find(x=>x.id===id);
+        if(u){
+          const d=document.createElement('div');
+          d.textContent=u.name;
+          d.style.cursor='pointer';
+          d.onclick=()=>{selectedPeer=id; renderChat();};
+          contactsDiv.appendChild(d);
+        }
+      });
+      groupsDiv.innerHTML='';
+      groups.forEach(g=>{
+        const d=document.createElement('div');
+        d.textContent=g.name;
+        d.style.cursor='pointer';
+        d.onclick=()=>{selectedPeer=g.id; renderChat();};
+        groupsDiv.appendChild(d);
+      });
+      renderChat();
+    }
+
+    function renderChat(){
+      const chatBox = document.getElementById('chatBox');
+      const chatHeader = document.getElementById('chatHeader');
+      chatBox.innerHTML='';
+      if(!selectedPeer){
+        chatHeader.innerHTML='<h3>Kein Chat ausgewählt</h3>';
+        return;
+      }
+      const isGroup = selectedPeer.startsWith('g_');
+      const name = isGroup ? (groups.find(g=>g.id===selectedPeer)||{}).name : (users.find(u=>u.id===selectedPeer)||{}).name;
+      chatHeader.innerHTML='<h3>'+name+'</h3>';
+      let conv = messages.filter(m => m.to===selectedPeer || (m.to===currentUser.id && m.from===selectedPeer) || (m.from===currentUser.id && m.to===selectedPeer));
+      conv.sort((a,b)=>a.time-b.time);
+      conv.forEach(m=>{
+        const div=document.createElement('div');
+        div.className='message '+(m.from===currentUser.id?'sent':'received');
+        div.textContent=m.text;
+        chatBox.appendChild(div);
+      });
+      chatBox.scrollTop=chatBox.scrollHeight;
+    }
+
+    function uid(){return Math.random().toString(36).substr(2,9)}
+
+    function registerUser(){
+      const name=document.getElementById('username').value.trim();
+      if(!name)return alert('Bitte Namen eingeben');
+      if(users.some(u=>u.name.toLowerCase()===name.toLowerCase()))return alert('Name existiert schon');
+      const u={id:'u_'+uid(),name,contacts:[]};
+      users.push(u); currentUser=u; save(); render();
+    }
+    function loginUser(){
+      const name=document.getElementById('username').value.trim();
+      const u=users.find(x=>x.name.toLowerCase()===name.toLowerCase());
+      if(!u)return alert('Nutzer nicht gefunden');
+      currentUser=u; save(); render();
+    }
+    function logoutUser(){ currentUser=null; selectedPeer=null; save(); render(); }
+
+    function addContact(){
+      const name=document.getElementById('addContactName').value.trim();
+      const u=users.find(x=>x.name.toLowerCase()===name.toLowerCase());
+      if(!u)return alert('Nutzer nicht gefunden');
+      if(!currentUser.contacts.includes(u.id))currentUser.contacts.push(u.id);
+      save(); render();
+    }
+
+    function createGroup(){
+      const name=document.getElementById('newGroupName').value.trim();
+      if(!name)return alert('Gruppenname eingeben');
+      const g={id:'g_'+uid(),name,members:[currentUser.id]};
+      groups.push(g); save(); render();
+    }
+
+    function sendMessage(){
+      if(!selectedPeer)return alert('Wähle zuerst einen Chat');
+      const input=document.getElementById('messageInput');
+      const text=input.value.trim();
+      if(!text)return;
+      messages.push({id:'m_'+uid(),from:currentUser.id,to:selectedPeer,text,time:Date.now()});
+      save(); input.value=''; renderChat();
+    }
+
+    render();
+  </script>
+</body>
+</html>
