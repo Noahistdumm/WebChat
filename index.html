@@ -14,7 +14,7 @@
   button{cursor:pointer;background:#2563eb;color:#fff;border:none;}
   button:hover{background:#1e40af;}
   .chat-box{flex:1; overflow-y:auto; border:1px solid #ddd; border-radius:6px; padding:8px; background:#fafafa; display:flex; flex-direction:column; gap:6px;}
-  .message{max-width:70%;padding:6px 8px;border-radius:6px;}
+  .message{max-width:70%;padding:6px 8px;border-radius:6px; word-wrap: break-word;}
   .sent{background:#dbeafe;align-self:flex-end;}
   .received{background:#f3f4f6;align-self:flex-start;}
   img.chat-img{max-width:200px;border-radius:6px;}
@@ -208,28 +208,26 @@ async function loadChat(){
             const m=docu.data();
             if(selectedPeer.type==='user'){
                 if((m.from===me.uid && m.to===selectedPeer.id)||(m.from===selectedPeer.id && m.to===me.uid)){
-                    const div=document.createElement('div');
                     if(m.type==='image'){
                         const img=document.createElement('img');
                         img.src=m.url;
-                        img.className='chat-img message sent';
-                        if(m.from!==me.uid) img.className='chat-img message received';
+                        img.className='chat-img message '+(m.from===me.uid?'sent':'received');
                         chatBox.appendChild(img);
                     } else {
+                        const div=document.createElement('div');
                         div.textContent=m.text;
                         div.className='message '+(m.from===me.uid?'sent':'received');
                         chatBox.appendChild(div);
                     }
                 }
             } else if(selectedPeer.type==='group'){
-                const div=document.createElement('div');
                 if(m.type==='image'){
                     const img=document.createElement('img');
                     img.src=m.url;
-                    img.className='chat-img message sent';
-                    if(m.from!==me.uid) img.className='chat-img message received';
+                    img.className='chat-img message '+(m.from===me.uid?'sent':'received');
                     chatBox.appendChild(img);
                 } else {
+                    const div=document.createElement('div');
                     div.textContent=m.text;
                     div.className='message '+(m.from===me.uid?'sent':'received');
                     chatBox.appendChild(div);
@@ -254,14 +252,17 @@ window.sendImage = async ()=>{
     if(!selectedPeer){alert('Chat auswählen'); return;}
     const file=imageInput.files[0];
     if(!file){alert('Keine Datei gewählt'); return;}
-    const storageRef = ref(storage, `chatImages/${me.uid}_${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
-    await addDoc(collection(db,'messages'), {from:me.uid,to:selectedPeer.id,type:'image',url,timestamp:Date.now()});
-    imageInput.value='';
+    try{
+        const storageRef = ref(storage, `chatImages/${me.uid}_${Date.now()}_${file.name}`);
+        await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(storageRef);
+        await addDoc(collection(db,'messages'), {from:me.uid,to:selectedPeer.id,type:'image',url,timestamp:Date.now()});
+        imageInput.value='';
+    } catch(e){ console.error(e); alert('Fehler beim Hochladen'); }
 };
 </script>
 
 </body>
 </html>
+
 
