@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebChat Deluxe V1.1.4</title>
+<title>WebChat Deluxe V1.1.6</title>
 <style>
   body { font-family: Arial,sans-serif; background:#f1f5f9; margin:0; padding:0; }
   .container { display:flex; max-width:1200px; margin:20px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
@@ -26,7 +26,7 @@
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.1.4</h2>
+    <h2>WebChat Deluxe V1.1.6</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -243,46 +243,48 @@ window.sendMessage = async ()=>{
     messageInput.value='';
 };
 
-// --- Bild senden wie Text ---
+// --- Bild senden mit Debug ---
 window.sendImage = async () => {
-    if (!selectedPeer) { alert("Chat auswählen"); return; }
+    if(!selectedPeer){alert('Chat auswählen'); return;}
     const file = imageInput.files[0];
-    if (!file) { alert("Bitte zuerst ein Bild auswählen."); return; }
+    if(!file){alert('Keine Datei gewählt'); return;}
+    
+    console.log("Bild wird gesendet:", file.name);
+    alert("Upload gestartet: "+file.name);
 
     const reader = new FileReader();
     reader.onload = async (e) => {
-        try {
+        try{
             const arrayBuffer = e.target.result;
             const cleanName = file.name.replace(/[^\w.-]/g, "_");
             const storageRef = ref(storage, `chatImages/${me.uid}_${Date.now()}_${cleanName}`);
             const snapshot = await uploadBytes(storageRef, new Uint8Array(arrayBuffer));
             const url = await getDownloadURL(snapshot.ref);
 
-            // Nachricht speichern wie Text
-            await addDoc(collection(db, "messages"), {
+            await addDoc(collection(db,'messages'), {
                 from: me.uid,
                 to: selectedPeer.id,
-                type: "image",
-                url: url,
+                type: 'image',
+                url,
                 timestamp: Date.now()
             });
-
-            imageInput.value = "";
-        } catch (err) {
+            alert("Bild erfolgreich gesendet!");
+            imageInput.value = '';
+        }catch(err){
             console.error(err);
-            alert("Fehler beim Hochladen: " + err.message);
+            alert("Fehler beim Upload: "+err.message);
         }
     };
     reader.readAsArrayBuffer(file);
 };
 
-// --- Button EventListener ---
 sendImageBtn.addEventListener('click', sendImage);
 
 </script>
 
 </body>
 </html>
+
 
 
 
