@@ -24,27 +24,27 @@
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V2</h2>
+    <h2>WebChat Deluxe</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"/><br/><br/>
       <input type="password" id="password" placeholder="Passwort"/><br/><br/>
-      <button onclick="signup()">Registrieren</button>
-      <button style="margin-top:8px;background:#059669" onclick="login()">Anmelden</button>
+      <button type="button" onclick="signup()">Registrieren</button>
+      <button type="button" style="margin-top:8px;background:#059669" onclick="login()">Anmelden</button>
     </div>
 
     <div id="userArea" style="display:none;">
       <div id="userInfo"></div>
-      <button style="background:#dc2626;margin-top:8px" onclick="logout()">Abmelden</button>
+      <button type="button" style="background:#dc2626;margin-top:8px" onclick="logout()">Abmelden</button>
       <hr/>
       <h4>Kontakte</h4>
       <div id="contacts"></div>
       <input id="addContactInput" placeholder="Name hinzufügen"/><br/>
-      <button style="margin-top:6px" onclick="addContactByName()">Hinzufügen</button>
+      <button type="button" style="margin-top:6px" onclick="addContactByName()">Hinzufügen</button>
       <hr/>
       <h4>Gruppen</h4>
       <div id="groups"></div>
       <input id="newGroupName" placeholder="Gruppenname"/><br/>
-      <button style="margin-top:6px" onclick="createGroup()">Erstellen</button>
+      <button type="button" style="margin-top:6px" onclick="createGroup()">Erstellen</button>
     </div>
   </div>
 
@@ -54,8 +54,8 @@
     <div style="display:flex;gap:8px;margin-top:8px;">
       <input id="messageInput" placeholder="Nachricht..." style="flex:1"/>
       <input type="file" id="imageInput"/>
-      <button onclick="sendMessage()">Senden</button>
-      <button onclick="sendImage()">Bild senden</button>
+      <button type="button" onclick="sendMessage()">Senden</button>
+      <button type="button" onclick="sendImage()">Bild senden</button>
     </div>
   </div>
 </div>
@@ -264,5 +264,6 @@ window.sendImage = async ()=>{
 
 </body>
 </html>
+
 
 
