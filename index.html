@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebChat Deluxe V1.1.9</title>
+<title>WebChat Deluxe V1.1.10</title>
 <style>
   body { font-family: Arial,sans-serif; background:#f1f5f9; margin:0; padding:0; }
   .container { display:flex; max-width:1200px; margin:20px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
@@ -27,7 +27,7 @@
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.1.9</h2>
+    <h2>WebChat Deluxe V1.1.10</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -71,6 +71,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebas
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, collection, addDoc, query, where, getDocs, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-storage.js";
+import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-messaging.js";
 
 // --- FIREBASE CONFIG ---
 const firebaseConfig = {
@@ -88,6 +89,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+const messaging = getMessaging(app);
 
 const authArea = document.getElementById('authArea');
 const userArea = document.getElementById('userArea');
@@ -103,7 +105,7 @@ const previewImg = document.getElementById('previewImg');
 
 let me = null;
 let selectedPeer = null;
-let unreadCounts = {}; // { chatId: Zahl }
+let unreadCounts = {};
 
 // --- Notifications + Sound ---
 let notifyAllowed = false;
@@ -115,6 +117,7 @@ async function requestNotificationPermission() {
     const permission = await Notification.requestPermission();
     return permission === "granted";
 }
+
 requestNotificationPermission().then(granted => { notifyAllowed = granted; });
 
 function showNotification(title, body) {
@@ -127,6 +130,20 @@ function updateUnreadBadge(chatId){
     const span = document.getElementById(`unread-${chatId}`);
     if(span) span.textContent = unreadCounts[chatId] || '';
 }
+
+// --- Push Token ---
+async function initPush() {
+    try {
+        const token = await getToken(messaging, { vapidKey: '<DEIN_VAPID_KEY>' });
+        console.log("Push Token:", token);
+    } catch(err){ console.error("Token Fehler:", err); }
+}
+initPush();
+
+onMessage(messaging, payload => {
+    const { title, body } = payload.notification;
+    showNotification(title, body);
+});
 
 // --- Auth State ---
 onAuthStateChanged(auth, async user=>{
@@ -260,22 +277,13 @@ async function loadChat(){
         chatBox.innerHTML='';
         snap.forEach(docu=>{
             const m=docu.data();
-            if(selectedPeer.type==='user'){
-                if((m.from===me.uid && m.to===selectedPeer.id)||(m.from===selectedPeer.id && m.to===me.uid)){
-                    renderMessage(m);
-                    if(m.from !== me.uid) showNotification(selectedPeer.name, m.type==='text'?m.text:"Bildnachricht");
-                } else if(m.from !== me.uid && m.to === me.uid) {
-                    unreadCounts[m.from] = (unreadCounts[m.from] || 0) + 1;
-                    updateUnreadBadge(m.from);
-                }
-            } else if(selectedPeer.type==='group'){
-                if(m.to===selectedPeer.id){
-                    renderMessage(m);
-                    if(m.from !== me.uid) showNotification(selectedPeer.name, m.type==='text'?m.text:"Bildnachricht");
-                } else if(m.to === m.to && m.from !== me.uid) {
-                    unreadCounts[m.to] = (unreadCounts[m.to] || 0) + 1;
-                    updateUnreadBadge(m.to);
-                }
+            let chatId = selectedPeer.type==='user' ? (m.from===me.uid ? m.to : m.from) : m.to;
+            if(chatId !== selectedPeer.id && m.from !== me.uid){
+                unreadCounts[chatId] = (unreadCounts[chatId] || 0) + 1;
+                updateUnreadBadge(chatId);
+                showNotification(selectedPeer?.name || "Neue Nachricht", m.type==='text'?m.text:"Bildnachricht");
+            } else if(chatId === selectedPeer.id){
+                renderMessage(m);
             }
         });
         chatBox.scrollTop = chatBox.scrollHeight;
@@ -334,3 +342,4 @@ sendImageBtn.addEventListener('click', sendImage);
 </script>
 </body>
 </html>
+
