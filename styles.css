@@ -1,6 +1,6 @@
 /* =========================================
-   🌐 WebChat Deluxe V1.1.9 – Stylesheet
-   Elegant, Modern & Responsive
+   🌐 WebChat Deluxe V1.2 – Stylesheet
+   Mit Anruf-Buttons (Audio/Video)
 ========================================= */
 
 * {
@@ -16,9 +16,6 @@ body {
   min-height: 100vh;
 }
 
-/* =========================================
-   Layout Container
-========================================= */
 .container {
   display: flex;
   max-width: 1200px;
@@ -30,9 +27,6 @@ body {
   transition: all 0.3s ease;
 }
 
-/* =========================================
-   Sidebar
-========================================= */
 .sidebar {
   width: 300px;
   background: #f9fafb;
@@ -50,7 +44,6 @@ body {
   text-align: center;
 }
 
-/* Inputs & Buttons */
 .sidebar input,
 .sidebar button {
   width: 100%;
@@ -80,9 +73,6 @@ body {
   transform: translateY(-2px);
 }
 
-/* =========================================
-   Kontakt- & Gruppenlisten
-========================================= */
 #contacts, #groups {
   display: flex;
   flex-direction: column;
@@ -128,9 +118,6 @@ body {
   box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
-/* =========================================
-   Hauptbereich (Chat)
-========================================= */
 .main {
   flex: 1;
   display: flex;
@@ -138,16 +125,61 @@ body {
   padding: 20px;
 }
 
-#chatHeader h3 {
+#chatHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 12px;
+}
+
+#chatHeader h3 {
   font-size: 1.5rem;
   color: #1e293b;
   font-weight: 600;
 }
 
-/* =========================================
-   Chatbox
-========================================= */
+/* 🔘 Call Buttons Styling */
+.call-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.call-btn {
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  transition: all 0.2s ease;
+}
+
+.call-btn:hover {
+  background: linear-gradient(135deg, #15803d, #16a34a);
+  transform: scale(1.1);
+}
+
+.call-btn.video {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+}
+
+.call-btn.video:hover {
+  background: linear-gradient(135deg, #1e40af, #2563eb);
+}
+
+.call-btn.hangup {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+}
+
+.call-btn.hangup:hover {
+  background: linear-gradient(135deg, #b91c1c, #dc2626);
+}
+
 .chat-box {
   flex: 1;
   overflow-y: auto;
@@ -161,22 +193,10 @@ body {
   scroll-behavior: smooth;
 }
 
-/* Scrollbar Styling */
-.chat-box::-webkit-scrollbar {
-  width: 8px;
-}
-.chat-box::-webkit-scrollbar-track {
-  background: #e5e7eb;
-  border-radius: 10px;
-}
-.chat-box::-webkit-scrollbar-thumb {
-  background: #2563eb;
-  border-radius: 10px;
-}
+.chat-box::-webkit-scrollbar { width: 8px; }
+.chat-box::-webkit-scrollbar-track { background: #e5e7eb; border-radius: 10px; }
+.chat-box::-webkit-scrollbar-thumb { background: #2563eb; border-radius: 10px; }
 
-/* =========================================
-   Nachrichtenblasen
-========================================= */
 .message {
   max-width: 70%;
   padding: 12px 18px;
@@ -188,9 +208,7 @@ body {
   transition: all 0.2s ease;
 }
 
-.message:hover {
-  transform: scale(1.02);
-}
+.message:hover { transform: scale(1.02); }
 
 .sent {
   background: linear-gradient(135deg, #2563eb, #3b82f6);
@@ -206,9 +224,6 @@ body {
   border-bottom-left-radius: 4px;
 }
 
-/* =========================================
-   Chat-Bilder
-========================================= */
 .chat-img {
   max-width: 280px;
   border-radius: 16px;
@@ -222,9 +237,6 @@ body {
   box-shadow: 0 6px 18px rgba(0,0,0,0.15);
 }
 
-/* =========================================
-   Eingabebereich
-========================================= */
 #messageInput {
   flex: 1;
   padding: 14px;
@@ -249,9 +261,6 @@ body {
   box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
-/* =========================================
-   Buttons allgemein
-========================================= */
 button {
   background: linear-gradient(135deg, #2563eb, #3b82f6);
   color: #fff;
@@ -268,43 +277,22 @@ button:hover {
   transform: translateY(-2px);
 }
 
-/* =========================================
-   Trenner
-========================================= */
 .sidebar hr {
   margin: 12px 0;
   border: none;
   border-top: 1px solid #e5e7eb;
 }
 
-/* =========================================
-   Responsive Design
-========================================= */
 @media (max-width: 900px) {
-  .container {
-    flex-direction: column;
-    margin: 10px;
-  }
-  .sidebar {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid #d1d5db;
-  }
-  .main {
-    padding: 12px;
-  }
+  .container { flex-direction: column; margin: 10px; }
+  .sidebar { width: 100%; border-right: none; border-bottom: 1px solid #d1d5db; }
+  .main { padding: 12px; }
+  #chatHeader { flex-direction: column; gap: 8px; }
 }
 
 @media (max-width: 500px) {
-  .message {
-    max-width: 90%;
-    padding: 10px 14px;
-  }
-  .chat-img {
-    max-width: 200px;
-  }
-  .sidebar {
-    padding: 12px;
-  }
+  .message { max-width: 90%; padding: 10px 14px; }
+  .chat-img { max-width: 200px; }
+  .sidebar { padding: 12px; }
 }
 
