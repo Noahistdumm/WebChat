@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebChat Deluxe V1.1</title>
+<title>WebChat Deluxe V1.1.2</title>
 <style>
   body { font-family: Arial,sans-serif; background:#f1f5f9; margin:0; padding:0; }
   .container { display:flex; max-width:1200px; margin:20px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
   .sidebar { width:300px; border-right:1px solid #ddd; padding:16px; background:#fff; }
   .main { flex:1; padding:16px; display:flex; flex-direction:column; }
-  h2{margin-top:0;}
+  h2,h3,h4{margin-top:0;margin-bottom:8px;}
   input,button,select{padding:8px;border-radius:6px;border:1px solid #ccc;font-size:14px;}
   button{cursor:pointer;background:#2563eb;color:#fff;border:none;}
   button:hover{background:#1e40af;}
@@ -18,13 +18,15 @@
   .sent{background:#dbeafe;align-self:flex-end;}
   .received{background:#f3f4f6;align-self:flex-start;}
   img.chat-img{max-width:200px;border-radius:6px;}
+  .sidebar div{margin-bottom:4px;}
+  .sidebar div:hover{background:#f3f4f6; cursor:pointer;}
 </style>
 </head>
 <body>
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.1</h2>
+    <h2>WebChat Deluxe V1.1.2</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -142,7 +144,6 @@ async function loadContacts(){
         if(u.uid!==me.uid){
             const div=document.createElement('div');
             div.textContent=u.name;
-            div.style.cursor='pointer';
             div.onclick=()=>{ selectedPeer={type:'user',id:u.uid,name:u.name}; loadChat(); };
             contactsDiv.appendChild(div);
         }
@@ -158,7 +159,6 @@ async function loadGroups(){
         const g=docu.data();
         const div=document.createElement('div');
         div.textContent=g.name;
-        div.style.cursor='pointer';
         div.onclick=()=>{ selectedPeer={type:'group',id:docu.id,name:g.name}; loadChat(); };
         groupsDiv.appendChild(div);
     });
@@ -178,7 +178,7 @@ window.addContactByName = async ()=>{
 window.createGroup = async ()=>{
     const name = document.getElementById('newGroupName').value.trim();
     if(!name) return alert('Gruppenname angeben');
-    const emails = prompt("Gib die E-Mail-Adressen der Mitglieder (komma-separiert)").split(',').map(s=>s.trim());
+    const emails = prompt("E-Mail-Adressen der Mitglieder (komma-getrennt)").split(',').map(s=>s.trim());
     const membersUIDs = [];
     for(const email of emails){
         const q = query(collection(db,'users'), where('email','==',email));
@@ -215,7 +215,7 @@ async function loadChat(){
                 if(m.to===selectedPeer.id) renderMessage(m);
             }
         });
-        chatBox.scrollTop=chatBox.scrollHeight;
+        chatBox.scrollTop = chatBox.scrollHeight;
     });
 }
 
@@ -257,12 +257,14 @@ window.sendImage = async ()=>{
     } catch(e){console.error(e); alert('Fehler beim Hochladen');}
 };
 
-// --- Button EventListener (optional) ---
+// --- Button EventListener ---
 sendImageBtn.addEventListener('click', sendImage);
+
 </script>
 
 </body>
 </html>
+
 
 
 
