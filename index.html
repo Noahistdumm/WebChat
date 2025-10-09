@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebChat Deluxe V1.1.10</title>
+<title>WebChat Deluxe V1.1.11</title>
 <style>
   body { font-family: Arial,sans-serif; background:#f1f5f9; margin:0; padding:0; }
   .container { display:flex; max-width:1200px; margin:20px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
@@ -27,7 +27,7 @@
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.1.10</h2>
+    <h2>WebChat Deluxe V1.1.11</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -73,7 +73,6 @@ import { getFirestore, doc, setDoc, collection, addDoc, query, where, getDocs, o
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-storage.js";
 import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-messaging.js";
 
-// --- FIREBASE CONFIG ---
 const firebaseConfig = {
     apiKey: "AIzaSyCFgiS9au7GOzhJ7_ayBcBM3bZrEm5GJOA",
     authDomain: "webchat-a47cc.firebaseapp.com",
@@ -106,8 +105,8 @@ const previewImg = document.getElementById('previewImg');
 let me = null;
 let selectedPeer = null;
 let unreadCounts = {};
+let lastRead = {};
 
-// --- Notifications + Sound ---
 let notifyAllowed = false;
 const messageSound = new Audio('https://www.soundjay.com/button/beep-07.mp3');
 
@@ -131,7 +130,6 @@ function updateUnreadBadge(chatId){
     if(span) span.textContent = unreadCounts[chatId] || '';
 }
 
-// --- Push Token ---
 async function initPush() {
     try {
         const token = await getToken(messaging, { vapidKey: '<DEIN_VAPID_KEY>' });
@@ -139,13 +137,11 @@ async function initPush() {
     } catch(err){ console.error("Token Fehler:", err); }
 }
 initPush();
-
 onMessage(messaging, payload => {
     const { title, body } = payload.notification;
     showNotification(title, body);
 });
 
-// --- Auth State ---
 onAuthStateChanged(auth, async user=>{
     if(user){
         me = { uid:user.uid, email:user.email, name:user.email.split('@')[0] };
@@ -165,7 +161,6 @@ onAuthStateChanged(auth, async user=>{
     }
 });
 
-// --- Auth ---
 window.signup = async ()=>{
     const email=document.getElementById('email').value;
     const pw=document.getElementById('password').value;
@@ -180,7 +175,6 @@ window.login = async ()=>{
 };
 window.logout = async ()=>{ await signOut(auth); selectedPeer=null; chatBox.innerHTML=''; };
 
-// --- Kontakte laden ---
 async function loadContacts(){
     contactsDiv.innerHTML='';
     const q=query(collection(db,'users'));
@@ -199,6 +193,7 @@ async function loadContacts(){
             div.appendChild(countSpan);
             div.onclick = () => {
                 selectedPeer={type:'user',id:u.uid,name:u.name};
+                lastRead[u.uid] = Date.now();
                 unreadCounts[u.uid]=0;
                 updateUnreadBadge(u.uid);
                 loadChat();
@@ -208,7 +203,6 @@ async function loadContacts(){
     });
 }
 
-// --- Gruppen laden ---
 async function loadGroups(){
     groupsDiv.innerHTML='';
     const q=query(collection(db,'groups'), where('members','array-contains',me.uid));
@@ -226,6 +220,7 @@ async function loadGroups(){
         div.appendChild(countSpan);
         div.onclick = () => {
             selectedPeer={type:'group',id:docu.id,name:g.name};
+            lastRead[docu.id] = Date.now();
             unreadCounts[docu.id]=0;
             updateUnreadBadge(docu.id);
             loadChat();
@@ -234,7 +229,6 @@ async function loadGroups(){
     });
 }
 
-// --- Kontakte hinzufügen ---
 window.addContactByName = async ()=>{
     const name=document.getElementById('addContactInput').value.trim();
     if(!name){alert('Name angeben'); return;}
@@ -244,7 +238,6 @@ window.addContactByName = async ()=>{
     alert('Kontakt kann jetzt für private Gruppen genutzt werden.');
 };
 
-// --- Gruppen erstellen ---
 window.createGroup = async ()=>{
     const name = document.getElementById('newGroupName').value.trim();
     if(!name) return alert('Gruppenname angeben');
@@ -261,36 +254,36 @@ window.createGroup = async ()=>{
     alert('Private Gruppe erstellt!');
 };
 
-// --- Chat laden ---
 async function loadChat(){
-    if(!selectedPeer){ chatHeader.innerHTML='<h3>Wähle einen Chat</h3>'; return;}
+    if(!selectedPeer) return;
     chatHeader.innerHTML=`<h3>${selectedPeer.name}</h3>`;
     chatBox.innerHTML='';
-    let messagesQuery;
-    if(selectedPeer.type==='user'){
-        messagesQuery=query(collection(db,'messages'), orderBy('timestamp'));
-    } else if(selectedPeer.type==='group'){
-        messagesQuery=query(collection(db,'messages'), where('to','==',selectedPeer.id), orderBy('timestamp'));
-    }
+    lastRead[selectedPeer.id] = Date.now();
+    unreadCounts[selectedPeer.id]=0;
+    updateUnreadBadge(selectedPeer.id);
 
-    onSnapshot(messagesQuery,snap=>{
+    const messagesQuery = selectedPeer.type==='user'
+        ? query(collection(db,'messages'), orderBy('timestamp'))
+        : query(collection(db,'messages'), where('to','==',selectedPeer.id), orderBy('timestamp'));
+
+    onSnapshot(messagesQuery, snap=>{
         chatBox.innerHTML='';
         snap.forEach(docu=>{
-            const m=docu.data();
+            const m = docu.data();
             let chatId = selectedPeer.type==='user' ? (m.from===me.uid ? m.to : m.from) : m.to;
-            if(chatId !== selectedPeer.id && m.from !== me.uid){
+
+            if(chatId === selectedPeer.id){
+                renderMessage(m);
+            } else if(m.from !== me.uid && m.timestamp > (lastRead[chatId] || 0)){
                 unreadCounts[chatId] = (unreadCounts[chatId] || 0) + 1;
                 updateUnreadBadge(chatId);
-                showNotification(selectedPeer?.name || "Neue Nachricht", m.type==='text'?m.text:"Bildnachricht");
-            } else if(chatId === selectedPeer.id){
-                renderMessage(m);
+                showNotification(chatId, m.type==='text'?m.text:"Bildnachricht");
             }
         });
         chatBox.scrollTop = chatBox.scrollHeight;
     });
 }
 
-// --- Nachrichten rendern ---
 function renderMessage(m){
     if(m.type==='image'){
         const img=document.createElement('img');
@@ -305,7 +298,6 @@ function renderMessage(m){
     }
 }
 
-// --- Text senden ---
 window.sendMessage = async ()=>{
     if(!selectedPeer){alert('Chat auswählen'); return;}
     const text=messageInput.value.trim();
@@ -314,7 +306,6 @@ window.sendMessage = async ()=>{
     messageInput.value='';
 };
 
-// --- Bild senden mit Vorschau ---
 imageInput.addEventListener('change', ()=>{
     const file = imageInput.files[0];
     if(file){
@@ -342,4 +333,5 @@ sendImageBtn.addEventListener('click', sendImage);
 </script>
 </body>
 </html>
+
 
