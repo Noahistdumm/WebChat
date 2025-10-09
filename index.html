@@ -64,7 +64,6 @@
     </div>
   </div>
 </div>
-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
@@ -114,6 +113,12 @@ let unreadCounts = {};
 let pc = null;
 let localStream = null;
 let callDoc = null;
+
+// --- Sounds ---
+const outgoingCallSound = new Audio('https://www.soundjay.com/phone/phone-dial-01.mp3');
+outgoingCallSound.loop = true;
+const incomingCallSound = new Audio('https://www.soundjay.com/phone/phone-ring-01.mp3');
+incomingCallSound.loop = true;
 
 // --- Notification & Sound ---
 let notifyAllowed = false;
@@ -336,10 +341,12 @@ window.createGroup=async()=>{
   alert('Private Gruppe erstellt!');
 };
 
-// --- WebRTC Anrufe (wie vorher) ---
+// --- WebRTC Anrufe ---
 async function startCall(video=false){
   if(!selectedPeer) return alert("Wähle zuerst einen Chat aus!");
   videoContainer.style.display=video?"flex":"none";
+
+  outgoingCallSound.play().catch(()=>{});
 
   localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:video});
   localVideo.srcObject=localStream;
@@ -365,6 +372,7 @@ async function startCall(video=false){
     const data=snap.data();
     if(!pc.currentRemoteDescription && data?.answer){
       await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      outgoingCallSound.pause(); outgoingCallSound.currentTime = 0;
     }
   });
 
@@ -384,7 +392,9 @@ async function endCall(){
   videoContainer.style.display="none";
   audioCallBtn.style.display="inline-block";
   videoCallBtn.style.display="inline-block";
-  endCallBtn.style.display="none";
+
+  outgoingCallSound.pause(); outgoingCallSound.currentTime=0;
+  incomingCallSound.pause(); incomingCallSound.currentTime=0;
 }
 
 audioCallBtn.onclick=()=>startCall(false);
@@ -396,8 +406,13 @@ onSnapshot(collection(db,"calls"),snapshot=>{
   snapshot.docChanges().forEach(async change=>{
     const data=change.doc.data();
     if(change.type==="added" && data.to===me?.uid && !pc){
+      incomingCallSound.play().catch(()=>{});
+
       const accept=confirm(`${data.video?"Video":"Audio"}-Anruf von ${data.from}. Annehmen?`);
-      if(!accept) return;
+      if(!accept) { incomingCallSound.pause(); incomingCallSound.currentTime=0; return; }
+
+      incomingCallSound.pause(); incomingCallSound.currentTime=0;
+
       pc=new RTCPeerConnection();
       localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:data.video});
       localVideo.srcObject=localStream;
@@ -414,8 +429,9 @@ onSnapshot(collection(db,"calls"),snapshot=>{
     }
   });
 });
-
 </script>
+
+
 </body>
 </html>
 
