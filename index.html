@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebChat Deluxe V1.1.7</title>
+<title>WebChat Deluxe V1.1.8</title>
 <style>
   body { font-family: Arial,sans-serif; background:#f1f5f9; margin:0; padding:0; }
   .container { display:flex; max-width:1200px; margin:20px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
@@ -26,7 +26,7 @@
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.1.7</h2>
+    <h2>WebChat Deluxe V1.1.8</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -98,6 +98,27 @@ const sendImageBtn = document.getElementById('sendImageBtn');
 
 let me = null;
 let selectedPeer = null;
+
+// --- Notifications + Sound ---
+let notifyAllowed = false;
+const messageSound = new Audio('https://www.soundjay.com/button/beep-07.mp3');
+
+async function requestNotificationPermission() {
+    if (!("Notification" in window)) {
+        alert("Dieser Browser unterstützt keine Benachrichtigungen.");
+        return false;
+    }
+    if (Notification.permission === "granted") return true;
+    const permission = await Notification.requestPermission();
+    return permission === "granted";
+}
+requestNotificationPermission().then(granted => { notifyAllowed = granted; });
+
+function showNotification(title, body) {
+    if (!notifyAllowed) return;
+    new Notification(title, { body });
+    messageSound.play().catch(e => console.log("Sound konnte nicht abgespielt werden:", e));
+}
 
 // --- Auth State ---
 onAuthStateChanged(auth, async user=>{
@@ -210,9 +231,13 @@ async function loadChat(){
             if(selectedPeer.type==='user'){
                 if((m.from===me.uid && m.to===selectedPeer.id)||(m.from===selectedPeer.id && m.to===me.uid)){
                     renderMessage(m);
+                    if(m.from !== me.uid) showNotification(selectedPeer.name, m.type==='text'?m.text:"Bildnachricht");
                 }
             } else if(selectedPeer.type==='group'){
-                if(m.to===selectedPeer.id) renderMessage(m);
+                if(m.to===selectedPeer.id) {
+                    renderMessage(m);
+                    if(m.from !== me.uid) showNotification(selectedPeer.name, m.type==='text'?m.text:"Bildnachricht");
+                }
             }
         });
         chatBox.scrollTop = chatBox.scrollHeight;
@@ -243,22 +268,16 @@ window.sendMessage = async ()=>{
     messageInput.value='';
 };
 
-// --- Bild senden direkt mit File ---
+// --- Bild senden direkt ---
 window.sendImage = async () => {
     if(!selectedPeer){alert('Chat auswählen'); return;}
     const file = imageInput.files[0];
     if(!file){alert('Keine Datei gewählt'); return;}
     
-    console.log("Bild wird gesendet:", file.name);
-    alert("Upload gestartet: "+file.name);
-
     try {
         const cleanName = file.name.replace(/[^\w.-]/g, "_");
         const storageRef = ref(storage, `chatImages/${me.uid}_${Date.now()}_${cleanName}`);
-
-        // Direktes Hochladen der File
         const snapshot = await uploadBytes(storageRef, file);
-
         const url = await getDownloadURL(snapshot.ref);
 
         await addDoc(collection(db,'messages'), {
@@ -268,8 +287,6 @@ window.sendImage = async () => {
             url,
             timestamp: Date.now()
         });
-
-        alert("Bild erfolgreich gesendet!");
         imageInput.value = '';
     } catch(err) {
         console.error(err);
@@ -283,12 +300,3 @@ sendImageBtn.addEventListener('click', sendImage);
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
