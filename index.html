@@ -114,9 +114,10 @@ let pc = null;
 let localStream = null;
 let callDoc = null;
 
-// --- Sounds ---
+// --- Sounds direkt von Website ---
 const outgoingCallSound = new Audio('https://www.soundjay.com/phone/phone-dial-01.mp3');
 outgoingCallSound.loop = true;
+
 const incomingCallSound = new Audio('https://www.soundjay.com/phone/phone-ring-01.mp3');
 incomingCallSound.loop = true;
 
@@ -430,6 +431,7 @@ onSnapshot(collection(db,"calls"),snapshot=>{
   });
 });
 </script>
+
 
 
 </body>
