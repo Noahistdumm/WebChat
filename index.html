@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>WebChat (Firebase)</title>
+<title>WebChat Deluxe</title>
 <style>
   body { font-family: Arial,sans-serif; background:#f1f5f9; margin:0; padding:0; }
   .container { display:flex; max-width:1200px; margin:20px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
@@ -17,13 +17,14 @@
   .message{max-width:70%;padding:6px 8px;border-radius:6px;}
   .sent{background:#dbeafe;align-self:flex-end;}
   .received{background:#f3f4f6;align-self:flex-start;}
+  img.chat-img{max-width:200px;border-radius:6px;}
 </style>
 </head>
 <body>
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat</h2>
+    <h2>WebChat Deluxe</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"/><br/><br/>
       <input type="password" id="password" placeholder="Passwort"/><br/><br/>
@@ -52,18 +53,21 @@
     <div id="chatBox" class="chat-box"></div>
     <div style="display:flex;gap:8px;margin-top:8px;">
       <input id="messageInput" placeholder="Nachricht..." style="flex:1"/>
+      <input type="file" id="imageInput"/>
       <button onclick="sendMessage()">Senden</button>
+      <button onclick="sendImage()">Bild senden</button>
     </div>
   </div>
 </div>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
-  import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, collection, addDoc, query, where, getDocs, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, collection, addDoc, query, where, getDocs, onSnapshot, orderBy } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-storage.js";
 
-  // --- FIREBASE CONFIG ---
-  const firebaseConfig = {
+// --- FIREBASE CONFIG ---
+const firebaseConfig = {
     apiKey: "AIzaSyCFgiS9au7GOzhJ7_ayBcBM3bZrEm5GJOA",
     authDomain: "webchat-a47cc.firebaseapp.com",
     databaseURL: "https://webchat-a47cc-default-rtdb.europe-west1.firebasedatabase.app",
@@ -72,146 +76,192 @@
     messagingSenderId: "318380716143",
     appId: "1:318380716143:web:da7474bfa392dfeaccdd9a",
     measurementId: "G-GBFBS5F8GB"
-  };
+};
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
 
-  const authArea = document.getElementById('authArea');
-  const userArea = document.getElementById('userArea');
-  const userInfo = document.getElementById('userInfo');
-  const contactsDiv = document.getElementById('contacts');
-  const groupsDiv = document.getElementById('groups');
-  const chatBox = document.getElementById('chatBox');
-  const chatHeader = document.getElementById('chatHeader');
-  const messageInput = document.getElementById('messageInput');
+const authArea = document.getElementById('authArea');
+const userArea = document.getElementById('userArea');
+const userInfo = document.getElementById('userInfo');
+const contactsDiv = document.getElementById('contacts');
+const groupsDiv = document.getElementById('groups');
+const chatBox = document.getElementById('chatBox');
+const chatHeader = document.getElementById('chatHeader');
+const messageInput = document.getElementById('messageInput');
+const imageInput = document.getElementById('imageInput');
 
-  let me = null;
-  let selectedPeer = null;
+let me = null;
+let selectedPeer = null;
 
-  onAuthStateChanged(auth, async user=>{
+// --- Auth State ---
+onAuthStateChanged(auth, async user=>{
     if(user){
-      me = { uid:user.uid, email:user.email, name:user.email.split('@')[0] };
-      await setDoc(doc(db,'users',me.uid), me, {merge:true});
-      authArea.style.display='none';
-      userArea.style.display='block';
-      userInfo.textContent=`Angemeldet als ${me.name}`;
-      loadContacts();
-      loadGroups();
-      chatHeader.innerHTML='<h3>Wähle einen Chat</h3>';
+        me = { uid:user.uid, email:user.email, name:user.email.split('@')[0] };
+        await setDoc(doc(db,'users',me.uid), me, {merge:true});
+        authArea.style.display='none';
+        userArea.style.display='block';
+        userInfo.textContent=`Angemeldet als ${me.name}`;
+        loadContacts();
+        loadGroups();
+        chatHeader.innerHTML='<h3>Wähle einen Chat</h3>';
     } else {
-      me=null;
-      authArea.style.display='block';
-      userArea.style.display='none';
-      chatHeader.innerHTML='<h3>Bitte anmelden</h3>';
-      chatBox.innerHTML='';
+        me=null;
+        authArea.style.display='block';
+        userArea.style.display='none';
+        chatHeader.innerHTML='<h3>Bitte anmelden</h3>';
+        chatBox.innerHTML='';
     }
-  });
+});
 
-  window.signup = async ()=>{
+// --- Auth ---
+window.signup = async ()=>{
     const email=document.getElementById('email').value;
     const pw=document.getElementById('password').value;
     if(!email||!pw){alert("E-Mail + Passwort angeben");return;}
     try{ await createUserWithEmailAndPassword(auth,email,pw);}catch(e){alert(e.message);}
-  };
-  window.login = async ()=>{
+};
+window.login = async ()=>{
     const email=document.getElementById('email').value;
     const pw=document.getElementById('password').value;
     if(!email||!pw){alert("E-Mail + Passwort angeben");return;}
     try{ await signInWithEmailAndPassword(auth,email,pw);}catch(e){alert(e.message);}
-  };
-  window.logout = async ()=>{ await signOut(auth); selectedPeer=null; chatBox.innerHTML=''; };
+};
+window.logout = async ()=>{ await signOut(auth); selectedPeer=null; chatBox.innerHTML=''; };
 
-  async function loadContacts(){
+// --- Kontakte ---
+async function loadContacts(){
     contactsDiv.innerHTML='';
     const q=query(collection(db,'users'));
     const snap=await getDocs(q);
     snap.forEach(docu=>{
-      const u=docu.data();
-      if(u.uid!==me.uid){
-        const div=document.createElement('div');
-        div.textContent=u.name;
-        div.style.cursor='pointer';
-        div.onclick=()=>{ selectedPeer={type:'user',id:u.uid,name:u.name}; loadChat(); };
-        contactsDiv.appendChild(div);
-      }
+        const u=docu.data();
+        if(u.uid!==me.uid){
+            const div=document.createElement('div');
+            div.textContent=u.name;
+            div.style.cursor='pointer';
+            div.onclick=()=>{ selectedPeer={type:'user',id:u.uid,name:u.name}; loadChat(); };
+            contactsDiv.appendChild(div);
+        }
     });
-  }
+}
 
-  async function loadGroups(){
+// --- Gruppen ---
+async function loadGroups(){
     groupsDiv.innerHTML='';
     const q=query(collection(db,'groups'), where('members','array-contains',me.uid));
     const snap=await getDocs(q);
     snap.forEach(docu=>{
-      const g=docu.data();
-      const div=document.createElement('div');
-      div.textContent=g.name;
-      div.style.cursor='pointer';
-      div.onclick=()=>{ selectedPeer={type:'group',id:docu.id,name:g.name}; loadChat(); };
-      groupsDiv.appendChild(div);
+        const g=docu.data();
+        const div=document.createElement('div');
+        div.textContent=g.name;
+        div.style.cursor='pointer';
+        div.onclick=()=>{ selectedPeer={type:'group',id:docu.id,name:g.name}; loadChat(); };
+        groupsDiv.appendChild(div);
     });
-  }
+}
 
-  window.addContactByName = async ()=>{
+// --- Kontakte hinzufügen ---
+window.addContactByName = async ()=>{
     const name=document.getElementById('addContactInput').value.trim();
     if(!name){alert('Name angeben'); return;}
     const q=query(collection(db,'users'),where('name','==',name));
     const snap=await getDocs(q);
     if(snap.empty){alert('Nutzer nicht gefunden'); return;}
-    alert('Kontakte werden hier in Firebase gespeichert oder als Freundesliste implementiert');
-  };
+    alert('Kontakt kann jetzt für private Gruppen genutzt werden.');
+};
 
-  window.createGroup = async ()=>{
-    const name=document.getElementById('newGroupName').value.trim();
-    if(!name){alert('Gruppenname angeben'); return;}
-    await addDoc(collection(db,'groups'), {name, members:[me.uid]});
+// --- Gruppen erstellen (private) ---
+window.createGroup = async ()=>{
+    const name = document.getElementById('newGroupName').value.trim();
+    if(!name) return alert('Gruppenname angeben');
+    const emails = prompt("Gib die E-Mail-Adressen der Mitglieder (komma-separiert)").split(',').map(s=>s.trim());
+    const membersUIDs = [];
+    for(const email of emails){
+        const q = query(collection(db,'users'), where('email','==',email));
+        const snap = await getDocs(q);
+        if(!snap.empty) membersUIDs.push(snap.docs[0].id);
+    }
+    membersUIDs.push(me.uid); // dich selbst hinzufügen
+    await addDoc(collection(db,'groups'), {name, members: membersUIDs});
     loadGroups();
-    alert('Gruppe erstellt!');
-  };
+    alert('Private Gruppe erstellt!');
+};
 
-  async function loadChat(){
+// --- Chat laden ---
+async function loadChat(){
     if(!selectedPeer){ chatHeader.innerHTML='<h3>Wähle einen Chat</h3>'; return;}
     chatHeader.innerHTML=`<h3>${selectedPeer.name}</h3>`;
     chatBox.innerHTML='';
     let messagesQuery;
     if(selectedPeer.type==='user'){
-      messagesQuery=query(collection(db,'messages'), orderBy('timestamp'));
+        messagesQuery=query(collection(db,'messages'), orderBy('timestamp'));
     } else if(selectedPeer.type==='group'){
-      messagesQuery=query(collection(db,'messages'), where('to','==',selectedPeer.id), orderBy('timestamp'));
+        messagesQuery=query(collection(db,'messages'), where('to','==',selectedPeer.id), orderBy('timestamp'));
     }
 
     onSnapshot(messagesQuery,snap=>{
-      chatBox.innerHTML='';
-      snap.forEach(docu=>{
-        const m=docu.data();
-        if(selectedPeer.type==='user'){
-          if((m.from===me.uid && m.to===selectedPeer.id)||(m.from===selectedPeer.id && m.to===me.uid)){
-            const div=document.createElement('div');
-            div.textContent=m.text;
-            div.className='message '+(m.from===me.uid?'sent':'received');
-            chatBox.appendChild(div);
-          }
-        } else if(selectedPeer.type==='group'){
-          const div=document.createElement('div');
-          div.textContent=m.text;
-          div.className='message '+(m.from===me.uid?'sent':'received');
-          chatBox.appendChild(div);
-        }
-      });
-      chatBox.scrollTop=chatBox.scrollHeight;
+        chatBox.innerHTML='';
+        snap.forEach(docu=>{
+            const m=docu.data();
+            if(selectedPeer.type==='user'){
+                if((m.from===me.uid && m.to===selectedPeer.id)||(m.from===selectedPeer.id && m.to===me.uid)){
+                    const div=document.createElement('div');
+                    if(m.type==='image'){
+                        const img=document.createElement('img');
+                        img.src=m.url;
+                        img.className='chat-img message sent';
+                        if(m.from!==me.uid) img.className='chat-img message received';
+                        chatBox.appendChild(img);
+                    } else {
+                        div.textContent=m.text;
+                        div.className='message '+(m.from===me.uid?'sent':'received');
+                        chatBox.appendChild(div);
+                    }
+                }
+            } else if(selectedPeer.type==='group'){
+                const div=document.createElement('div');
+                if(m.type==='image'){
+                    const img=document.createElement('img');
+                    img.src=m.url;
+                    img.className='chat-img message sent';
+                    if(m.from!==me.uid) img.className='chat-img message received';
+                    chatBox.appendChild(img);
+                } else {
+                    div.textContent=m.text;
+                    div.className='message '+(m.from===me.uid?'sent':'received');
+                    chatBox.appendChild(div);
+                }
+            }
+        });
+        chatBox.scrollTop=chatBox.scrollHeight;
     });
-  }
+}
 
-  window.sendMessage = async ()=>{
+// --- Nachrichten senden ---
+window.sendMessage = async ()=>{
     if(!selectedPeer){alert('Chat auswählen'); return;}
     const text=messageInput.value.trim();
     if(!text) return;
-    const msg={from:me.uid,to:selectedPeer.id,text,timestamp:Date.now()};
-    await addDoc(collection(db,'messages'), msg);
+    await addDoc(collection(db,'messages'), {from:me.uid,to:selectedPeer.id,type:'text',text,timestamp:Date.now()});
     messageInput.value='';
-  };
+};
 
+// --- Bilder senden ---
+window.sendImage = async ()=>{
+    if(!selectedPeer){alert('Chat auswählen'); return;}
+    const file=imageInput.files[0];
+    if(!file){alert('Keine Datei gewählt'); return;}
+    const storageRef = ref(storage, `chatImages/${me.uid}_${Date.now()}_${file.name}`);
+    await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(storageRef);
+    await addDoc(collection(db,'messages'), {from:me.uid,to:selectedPeer.id,type:'image',url,timestamp:Date.now()});
+    imageInput.value='';
+};
 </script>
+
 </body>
 </html>
+
