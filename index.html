@@ -67,15 +67,31 @@
     <audio id="remoteAudio" autoplay playsinline></audio>
   </div>
 </div>
-
-
 <script type="module">
 /* -------------------------
    Firebase & Imports
-------------------------- */
+   ------------------------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, collection, addDoc, query, where, getDocs, onSnapshot, orderBy, updateDoc } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+import {
+  getAuth,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut
+} from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  updateDoc
+} from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-storage.js";
 
 /* --- FIREBASE CONFIG --- */
@@ -97,7 +113,7 @@ const storage = getStorage(app);
 
 /* -------------------------
    UI Elemente
-------------------------- */
+   ------------------------- */
 const authArea = document.getElementById('authArea');
 const userArea = document.getElementById('userArea');
 const userInfo = document.getElementById('userInfo');
@@ -125,24 +141,26 @@ const incomingCallSound = new Audio('https://www.soundjay.com/phone/phone-ring-0
 incomingCallSound.loop = true;
 const messageSound = new Audio('https://www.soundjay.com/button/beep-07.mp3');
 
-/* --- Notifications --- */
+/* --- Notification --- */
 let notifyAllowed = false;
 async function requestNotificationPermission(){
   if(!("Notification" in window)) return false;
-  if(Notification.permission==="granted") return true;
+  if(Notification.permission === "granted") return true;
   const permission = await Notification.requestPermission();
-  return permission==="granted";
+  return permission === "granted";
 }
 requestNotificationPermission().then(granted => notifyAllowed = granted);
 function showNotification(title, body){
   if(!notifyAllowed) return;
-  new Notification(title,{body});
-  messageSound.play().catch(()=>{});
+  try {
+    new Notification(title, { body });
+    messageSound.play().catch(()=>{});
+  } catch(e) { /* ignore */ }
 }
 
 /* -------------------------
    State
-------------------------- */
+   ------------------------- */
 let me = null;
 let selectedPeer = null;
 let unreadCounts = {};
@@ -152,103 +170,125 @@ let callDoc = null;
 
 /* -------------------------
    Auth State
-------------------------- */
+   ------------------------- */
 onAuthStateChanged(auth, async user => {
   if(user){
-    me = { uid: user.uid, email: user.email, name: user.email.split('@')[0] };
-    await setDoc(doc(db,'users',me.uid), me, {merge:true});
-    authArea.style.display='none';
-    userArea.style.display='block';
+    me = { uid: user.uid, email: user.email, name: (user.email || '').split('@')[0] || 'User' };
+    try {
+      await setDoc(doc(db,'users',me.uid), me, { merge: true });
+    } catch(e) { console.error("Fehler beim Speichern des Users:", e); }
+    authArea.style.display = 'none';
+    userArea.style.display = 'block';
     userInfo.textContent = `Angemeldet als ${me.name}`;
     loadContacts();
     loadGroups();
-    chatTitle.textContent='Wähle einen Chat';
+    chatTitle.textContent = 'Wähle einen Chat';
   } else {
-    me=null;
-    authArea.style.display='block';
-    userArea.style.display='none';
-    chatTitle.textContent='Bitte anmelden';
-    chatBox.innerHTML='';
+    me = null;
+    authArea.style.display = 'block';
+    userArea.style.display = 'none';
+    chatTitle.textContent = 'Bitte anmelden';
+    chatBox.innerHTML = '';
   }
 });
 
 /* -------------------------
    Auth Funktionen
-------------------------- */
-window.signup = async ()=>{
+   ------------------------- */
+window.signup = async () => {
   const email = document.getElementById('email').value;
   const pw = document.getElementById('password').value;
-  if(!email||!pw){alert("E-Mail + Passwort angeben"); return;}
-  try{ await createUserWithEmailAndPassword(auth,email,pw);}catch(e){alert(e.message);}
+  if(!email || !pw){ alert("E-Mail + Passwort angeben"); return; }
+  try {
+    await createUserWithEmailAndPassword(auth, email, pw);
+  } catch(e) { alert(e.message || e); }
 };
-window.login = async ()=>{
+window.login = async () => {
   const email = document.getElementById('email').value;
   const pw = document.getElementById('password').value;
-  if(!email||!pw){alert("E-Mail + Passwort angeben"); return;}
-  try{ await signInWithEmailAndPassword(auth,email,pw);}catch(e){alert(e.message);}
+  if(!email || !pw){ alert("E-Mail + Passwort angeben"); return; }
+  try {
+    await signInWithEmailAndPassword(auth, email, pw);
+  } catch(e) { alert(e.message || e); }
 };
-window.logout = async ()=>{ await signOut(auth); selectedPeer=null; chatBox.innerHTML=''; };
+window.logout = async () => {
+  try {
+    await signOut(auth);
+  } catch(e) { console.error(e); }
+  selectedPeer = null;
+  chatBox.innerHTML = '';
+};
 
 /* -------------------------
    Kontakte & Gruppen
-------------------------- */
+   ------------------------- */
 async function loadContacts(){
-  contactsDiv.innerHTML='';
-  const q = query(collection(db,'users'));
-  const snap = await getDocs(q);
-  snap.forEach(docu=>{
-    const u = docu.data();
-    if(u.uid!==me.uid){
+  contactsDiv.innerHTML = '';
+  try {
+    const q = query(collection(db,'users'));
+    const snap = await getDocs(q);
+    snap.forEach(docu => {
+      const u = docu.data();
+      if(u.uid !== me.uid){
+        const div = document.createElement('div');
+        div.className = 'contact-item';
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = u.name || u.email || 'User';
+        nameSpan.style.marginRight = '8px';
+        const countSpan = document.createElement('span');
+        countSpan.id = 'unread-' + u.uid;
+        countSpan.textContent = unreadCounts[u.uid] || '';
+        div.appendChild(nameSpan);
+        div.appendChild(countSpan);
+        div.onclick = () => {
+          selectedPeer = { type: 'user', id: u.uid, name: u.name || u.email };
+          unreadCounts[u.uid] = 0;
+          updateUnreadBadge(u.uid);
+          loadChat();
+        };
+        contactsDiv.appendChild(div);
+      }
+    });
+  } catch(e) { console.error("Fehler beim Laden der Kontakte:", e); }
+}
+
+// Gruppen laden
+async function loadGroups(){
+  groupsDiv.innerHTML = '';
+  try {
+    const q = query(collection(db,'groups'), where('members','array-contains', me.uid));
+    const snap = await getDocs(q);
+    snap.forEach(docu => {
+      const g = docu.data();
       const div = document.createElement('div');
+      div.className = 'group-item';
       const nameSpan = document.createElement('span');
-      nameSpan.textContent = u.name;
+      nameSpan.textContent = g.name || 'Gruppe';
+      nameSpan.style.marginRight = '8px';
       const countSpan = document.createElement('span');
-      countSpan.id = `unread-${u.uid}`;
-      countSpan.textContent = unreadCounts[u.uid]||'';
+      countSpan.id = 'unread-' + docu.id;
+      countSpan.textContent = unreadCounts[docu.id] || '';
       div.appendChild(nameSpan);
       div.appendChild(countSpan);
-      div.onclick = ()=>{
-        selectedPeer={type:'user',id:u.uid,name:u.name};
-        unreadCounts[u.uid]=0;
-        updateUnreadBadge(u.uid);
+      div.onclick = () => {
+        selectedPeer = { type: 'group', id: docu.id, name: g.name };
+        unreadCounts[docu.id] = 0;
+        updateUnreadBadge(docu.id);
         loadChat();
       };
-      contactsDiv.appendChild(div);
-    }
-  });
+      groupsDiv.appendChild(div);
+    });
+  } catch(e) { console.error("Fehler beim Laden der Gruppen:", e); }
 }
 
-async function loadGroups(){
-  groupsDiv.innerHTML='';
-  const q = query(collection(db,'groups'), where('members','array-contains',me.uid));
-  const snap = await getDocs(q);
-  snap.forEach(docu=>{
-    const g = docu.data();
-    const div = document.createElement('div');
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = g.name;
-    const countSpan = document.createElement('span');
-    countSpan.id = `unread-${docu.id}`;
-    countSpan.textContent = unreadCounts[docu.id]||'';
-    div.appendChild(nameSpan);
-    div.appendChild(countSpan);
-    div.onclick = ()=>{
-      selectedPeer={type:'group',id:docu.id,name:g.name};
-      unreadCounts[docu.id]=0;
-      updateUnreadBadge(docu.id);
-      loadChat();
-    };
-    groupsDiv.appendChild(div);
-  });
-}
-
+/* kleine Hilfsfunktionen */
 window.addContactByName = async () => {
   const name = document.getElementById('addContactInput').value.trim();
   if(!name) return alert('Name eingeben');
   try{
     const newDoc = doc(collection(db,'users'));
-    await setDoc(newDoc, { uid: newDoc.id, name, email: `${name}@example.local` });
-    document.getElementById('addContactInput').value='';
+    await setDoc(doc(db,'users',newDoc.id), { uid: newDoc.id, name, email: `${name}@example.local` });
+    document.getElementById('addContactInput').value = '';
     loadContacts();
   }catch(e){ console.error(e); alert('Fehler beim Hinzufügen'); }
 };
@@ -258,88 +298,106 @@ window.createGroup = async () => {
   if(!gname) return alert('Gruppenname angeben');
   try{
     await addDoc(collection(db,'groups'), { name: gname, members: [me.uid], createdAt: Date.now() });
-    document.getElementById('newGroupName').value='';
+    document.getElementById('newGroupName').value = '';
     loadGroups();
   }catch(e){ console.error(e); alert('Fehler beim Erstellen'); }
 };
 
 /* -------------------------
-   Chat laden & Nachrichten
-------------------------- */
+   Chat laden und Nachrichten
+   ------------------------- */
 async function loadChat(){
-  if(!selectedPeer){ chatTitle.textContent='Wähle einen Chat'; callButtons.style.display='none'; return; }
-  chatTitle.textContent = selectedPeer.name;
-  callButtons.style.display = selectedPeer.type==='user'?'flex':'none';
-  chatBox.innerHTML='';
+  if(!selectedPeer){ chatTitle.textContent = 'Wähle einen Chat'; callButtons.style.display = 'none'; return; }
+  chatTitle.textContent = selectedPeer.name || 'Chat';
+  callButtons.style.display = selectedPeer.type === 'user' ? 'flex' : 'none';
+  chatBox.innerHTML = '';
 
-  const messagesQuery = query(collection(db,'messages'), orderBy('timestamp'));
-  onSnapshot(messagesQuery, snap=>{
-    chatBox.innerHTML='';
-    snap.forEach(docu=>{
-      const m = docu.data();
-      if(selectedPeer.type === 'user'){
-        if((m.from===me.uid && m.to===selectedPeer.id) || (m.from===selectedPeer.id && m.to===me.uid)){
-          renderMessage(m);
-          if(m.from!==me.uid) showNotification(selectedPeer.name, m.type==='text'?m.text:"Bildnachricht");
+  let messagesQuery;
+  try {
+    if(selectedPeer.type === 'user'){
+      messagesQuery = query(collection(db,'messages'), orderBy('timestamp'));
+    } else {
+      messagesQuery = query(collection(db,'messages'), where('to','==', selectedPeer.id), orderBy('timestamp'));
+    }
+
+    onSnapshot(messagesQuery, snap => {
+      chatBox.innerHTML = '';
+      snap.forEach(docu => {
+        const m = docu.data();
+        if(selectedPeer.type === 'user'){
+          // Filter: nur Nachrichten zwischen mir und dem Peer
+          if((m.from === me.uid && m.to === selectedPeer.id) || (m.from === selectedPeer.id && m.to === me.uid)){
+            renderMessage(m);
+            if(m.from !== me.uid) showNotification(selectedPeer.name, m.type === 'text' ? m.text : "Bildnachricht");
+          } else if(m.from !== me.uid && m.to === me.uid){
+            unreadCounts[m.from] = (unreadCounts[m.from] || 0) + 1;
+            updateUnreadBadge(m.from);
+          }
+        } else {
+          // Gruppen-Chat: einfache Darstellung (alle Nachrichten mit to === groupId)
+          if(m.to === selectedPeer.id){
+            renderMessage(m);
+            if(m.from !== me.uid) showNotification(selectedPeer.name, m.type === 'text' ? m.text : "Bildnachricht");
+          }
         }
-      } else {
-        if(m.to === selectedPeer.id){
-          renderMessage(m);
-          if(m.from!==me.uid) showNotification(selectedPeer.name,m.type==='text'?m.text:"Bildnachricht");
-        }
-      }
+      });
+      chatBox.scrollTop = chatBox.scrollHeight;
     });
-    chatBox.scrollTop = chatBox.scrollHeight;
-  });
+  } catch(e) { console.error("Fehler beim Laden des Chats:", e); }
 }
 
+/* Nachrichten rendern */
 function renderMessage(m){
-  if(m.type==='image'){
+  if(m.type === 'image'){
     const img = document.createElement('img');
     img.src = m.url;
-    img.className = 'chat-img message '+(m.from===me.uid?'sent':'received');
-    img.style.maxWidth='200px';
-    img.style.borderRadius='8px';
-    img.style.margin='5px';
+    img.className = 'chat-img message ' + (m.from === me.uid ? 'sent' : 'received');
+    img.style.maxWidth = '200px';
+    img.style.borderRadius = '8px';
+    img.style.margin = '5px';
     chatBox.appendChild(img);
   } else {
     const div = document.createElement('div');
     div.textContent = m.text;
-    div.className = 'message '+(m.from===me.uid?'sent':'received');
+    div.className = 'message ' + (m.from === me.uid ? 'sent' : 'received');
+    div.style.margin = '5px';
     chatBox.appendChild(div);
   }
 }
 
-window.sendMessage = async ()=>{
-  if(!selectedPeer){alert('Chat auswählen'); return;}
+/* Text senden */
+window.sendMessage = async () => {
+  if(!selectedPeer){ alert('Chat auswählen'); return; }
   const text = messageInput.value.trim();
   if(!text) return;
-  await addDoc(collection(db,'messages'),{from:me.uid,to:selectedPeer.id,type:'text',text,timestamp:Date.now()});
-  messageInput.value='';
+  try {
+    await addDoc(collection(db,'messages'), { from: me.uid, to: selectedPeer.id, type: 'text', text, timestamp: Date.now() });
+    messageInput.value = '';
+  } catch(e) { console.error("Fehler beim Senden:", e); alert('Senden fehlgeschlagen'); }
 };
 
-imageInput.addEventListener('change',()=>{
+/* Image preview + Upload-Funktion */
+imageInput.addEventListener('change', () => {
   const file = imageInput.files[0];
   if(file){
     previewImg.src = URL.createObjectURL(file);
-    previewImg.style.display='block';
-  } else previewImg.style.display='none';
+    previewImg.style.display = 'block';
+  } else previewImg.style.display = 'none';
 });
 
-window.sendImage = async ()=>{
-  if(!selectedPeer){alert('Chat auswählen'); return;}
+window.sendImage = async () => {
+  if(!selectedPeer){ alert('Chat auswählen'); return; }
   const file = imageInput.files[0];
-  if(!file){alert('Keine Datei gewählt'); return;}
+  if(!file){ alert('Keine Datei gewählt'); return; }
 
   try {
     const cleanName = file.name.replace(/[^\w.-]/g,"_");
     const path = `chatImages/${me.uid}_${Date.now()}_${cleanName}`;
     const storageRef = ref(storage, path);
-
     const snapshot = await uploadBytes(storageRef, file);
     const url = await getDownloadURL(snapshot.ref);
 
-    await addDoc(collection(db,'messages'),{
+    await addDoc(collection(db,'messages'), {
       from: me.uid,
       to: selectedPeer.id,
       type: 'image',
@@ -347,30 +405,48 @@ window.sendImage = async ()=>{
       timestamp: Date.now()
     });
 
-    imageInput.value='';
-    previewImg.style.display='none';
+    imageInput.value = '';
+    previewImg.style.display = 'none';
   } catch (err) {
     console.error("Upload-Fehler:", err);
     alert("Fehler beim Hochladen des Bildes.");
   }
 };
-sendImageBtn.addEventListener('click',sendImage);
+sendImageBtn.addEventListener('click', sendImage);
 
+/* unread badge helper */
 function updateUnreadBadge(chatId){
-  const span=document.getElementById(`unread-${chatId}`);
-  if(span) span.textContent=unreadCounts[chatId]||'';
+  const span = document.getElementById('unread-' + chatId);
+  if(span) span.textContent = unreadCounts[chatId] || '';
 }
 
 /* -------------------------
-   WebRTC Calls
-------------------------- */
-async function startCall(video=false){
+   WebRTC Calls (Audio/Video) mit STUN+TURN
+   ------------------------- */
+
+/*
+ Hinweis:
+ Ersetze die TURN-URL/username/credential durch deine eigenen coturn-/Anbieter-Daten
+ für produktive/zuverlässige Nutzung.
+ (Der hier verwendete TURN-Eintrag ist ein Platzhalter/Testeintrag.)
+*/
+
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  {
+    urls: 'turn:relay1.expressturn.com:3478',
+    username: 'expressturn',
+    credential: 'expressturn'
+  }
+];
+
+async function startCall(video = false){
   if(!selectedPeer) return alert("Wähle zuerst einen Chat aus!");
-  videoContainer.style.display=video?"flex":"none";
+  videoContainer.style.display = video ? "flex" : "none";
   outgoingCallSound.play().catch(()=>{});
 
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:video});
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: video });
     localVideo.srcObject = localStream;
   } catch(err) {
     console.error("Kamera/Mikrofon Fehler:", err);
@@ -378,10 +454,12 @@ async function startCall(video=false){
     return;
   }
 
-  pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
   pc.ontrack = e => {
+    console.log("Remote Stream:", e.streams[0]);
     remoteVideo.srcObject = e.streams[0];
     remoteAudio.srcObject = e.streams[0];
   };
@@ -393,82 +471,111 @@ async function startCall(video=false){
 
   pc.onicecandidate = e => { if(e.candidate) addDoc(offerCandidates, e.candidate.toJSON()); };
 
-  const offerDesc = await pc.createOffer();
-  await pc.setLocalDescription(offerDesc);
-  await setDoc(callRef,{offer:{sdp:offerDesc.sdp,type:offerDesc.type},from:me.uid,to:selectedPeer.id,active:true,video});
+  try {
+    const offerDesc = await pc.createOffer();
+    await pc.setLocalDescription(offerDesc);
+    await setDoc(callRef, { offer: { sdp: offerDesc.sdp, type: offerDesc.type }, from: me.uid, to: selectedPeer.id, active: true, video });
+  } catch(e) { console.error("Fehler beim Erstellen des Offers:", e); }
 
-  onSnapshot(callRef,async snap=>{
+  onSnapshot(callRef, async snap => {
     const data = snap.data();
     if(!pc.currentRemoteDescription && data?.answer){
-      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-      outgoingCallSound.pause(); outgoingCallSound.currentTime=0;
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      } catch(e) { console.error("Fehler beim Setzen der RemoteDescription (Caller):", e); }
+      outgoingCallSound.pause(); outgoingCallSound.currentTime = 0;
     }
   });
 
-  onSnapshot(answerCandidates,snap=>{
-    snap.docChanges().forEach(change=>{
-      if(change.type==="added") pc.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+  onSnapshot(answerCandidates, snap => {
+    snap.docChanges().forEach(change => {
+      if(change.type === "added") {
+        try { pc.addIceCandidate(new RTCIceCandidate(change.doc.data())); }
+        catch(e) { console.error("Fehler beim Hinzufügen der ICE-Kandidaten (Caller):", e); }
+      }
     });
   });
 
-  audioCallBtn.style.display="none";
-  videoCallBtn.style.display="none";
-  endCallBtn.style.display="inline-block";
+  audioCallBtn.style.display = "none";
+  videoCallBtn.style.display = "none";
+  endCallBtn.style.display = "inline-block";
 }
 
 async function endCall(){
-  if(pc) pc.close();
-  if(localStream) localStream.getTracks().forEach(t=>t.stop());
-  pc = null; localStream = null;
-  videoContainer.style.display="none";
-  audioCallBtn.style.display="inline-block";
-  videoCallBtn.style.display="inline-block";
-  endCallBtn.style.display="none";
-  outgoingCallSound.pause(); outgoingCallSound.currentTime=0;
-  incomingCallSound.pause(); incomingCallSound.currentTime=0;
-  if(callDoc){ await updateDoc(callDoc,{active:false}); callDoc=null; }
+  try {
+    if(pc) pc.close();
+    if(localStream) localStream.getTracks().forEach(t => t.stop());
+  } catch(e){ console.error(e); }
+  pc = null;
+  localStream = null;
+  videoContainer.style.display = "none";
+  audioCallBtn.style.display = "inline-block";
+  videoCallBtn.style.display = "inline-block";
+  endCallBtn.style.display = "none";
+  outgoingCallSound.pause(); outgoingCallSound.currentTime = 0;
+  incomingCallSound.pause(); incomingCallSound.currentTime = 0;
+  if(callDoc){
+    try { await updateDoc(callDoc, { active: false }); } catch(e) { /* ignore */ }
+    callDoc = null;
+  }
 }
 
 audioCallBtn.onclick = () => startCall(false);
 videoCallBtn.onclick = () => startCall(true);
 endCallBtn.onclick = () => endCall();
 
-/* Incoming Calls */
-onSnapshot(collection(db,"calls"),snapshot=>{
-  snapshot.docChanges().forEach(async change=>{
+/* --- Incoming Calls --- */
+onSnapshot(collection(db,"calls"), snapshot => {
+  snapshot.docChanges().forEach(async change => {
     const data = change.doc.data();
     const docRef = change.doc.ref;
-    if(change.type==="added" && data.to===me?.uid && !pc && data.active){
+    if(change.type === "added" && data.to === me?.uid && !pc && data.active){
       incomingCallSound.play().catch(()=>{});
       const accept = confirm(`${data.video ? "Video" : "Audio"}-Anruf von ${data.from}. Annehmen?`);
-      if(!accept){ incomingCallSound.pause(); incomingCallSound.currentTime=0; await updateDoc(docRef,{active:false}); return; }
-      incomingCallSound.pause(); incomingCallSound.currentTime=0;
+      if(!accept){
+        incomingCallSound.pause(); incomingCallSound.currentTime = 0;
+        try { await updateDoc(docRef, { active: false }); } catch(e) { /* ignore */ }
+        return;
+      }
+      incomingCallSound.pause(); incomingCallSound.currentTime = 0;
 
-      pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-      try { localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:data.video}); localVideo.srcObject = localStream; } 
-      catch(err){ console.error("Kamera/Mikrofon Fehler:", err); alert("Kamera oder Mikrofon konnte nicht geöffnet werden!"); return; }
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: data.video });
+        localVideo.srcObject = localStream;
+      } catch(err) {
+        console.error("Kamera/Mikrofon Fehler:", err);
+        alert("Kamera oder Mikrofon konnte nicht geöffnet werden!");
+        return;
+      }
 
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-      pc.ontrack = e => { remoteVideo.srcObject = e.streams[0]; remoteAudio.srcObject = e.streams[0]; };
+      pc.ontrack = e => { console.log("Remote Stream empfangen:", e.streams[0]); remoteVideo.srcObject = e.streams[0]; remoteAudio.srcObject = e.streams[0]; };
       videoContainer.style.display = data.video ? "flex" : "none";
 
       const answerCandidates = collection(docRef,"answerCandidates");
-      pc.onicecandidate = e => { if(e.candidate) addDoc(answerCandidates,e.candidate.toJSON()); };
+      pc.onicecandidate = e => { if(e.candidate) addDoc(answerCandidates, e.candidate.toJSON()); };
 
-      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-      const answerDesc = await pc.createAnswer();
-      await pc.setLocalDescription(answerDesc);
-      await updateDoc(docRef,{answer:{type:answerDesc.type,sdp:answerDesc.sdp},active:true});
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answerDesc = await pc.createAnswer();
+        await pc.setLocalDescription(answerDesc);
+        await updateDoc(docRef, { answer: { type: answerDesc.type, sdp: answerDesc.sdp }, active: true });
+      } catch(e) {
+        console.error("Fehler beim Beantworten des Calls:", e);
+      }
 
       callDoc = docRef;
-      audioCallBtn.style.display="none";
-      videoCallBtn.style.display="none";
-      endCallBtn.style.display="inline-block";
+      audioCallBtn.style.display = "none";
+      videoCallBtn.style.display = "none";
+      endCallBtn.style.display = "inline-block";
     }
   });
 });
 </script>
+
+
 
 </body>
 </html>
