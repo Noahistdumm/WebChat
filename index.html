@@ -63,7 +63,6 @@
       <video id="remoteVideo" autoplay playsinline style="width:40%;border-radius:10px;margin-top:10px;"></video>
     </div>
 
-    <!-- extra audio element damit Audio auch abgespielt wird, wenn kein sichtbares video -->
     <audio id="remoteAudio" autoplay playsinline></audio>
   </div>
 </div>
@@ -263,7 +262,7 @@ window.createGroup = async () => {
 };
 
 /* -------------------------
-   Chat laden und Nachrichten
+   Chat laden & Nachrichten
 ------------------------- */
 async function loadChat(){
   if(!selectedPeer){ chatTitle.textContent='Wähle einen Chat'; callButtons.style.display='none'; return; }
@@ -271,42 +270,24 @@ async function loadChat(){
   callButtons.style.display = selectedPeer.type==='user'?'flex':'none';
   chatBox.innerHTML='';
 
-  let messagesQuery;
-  if(selectedPeer.type==='user'){
-    messagesQuery = query(
-      collection(db,'messages'),
-      where('from','in',[me.uid, selectedPeer.id]),
-      where('to','in',[me.uid, selectedPeer.id]),
-      orderBy('timestamp')
-    );
-  } else {
-    messagesQuery = query(
-      collection(db,'messages'),
-      where('to','==',selectedPeer.id),
-      orderBy('timestamp')
-    );
-  }
-
-  onSnapshot(messagesQuery,snap=>{
+  const messagesQuery = query(collection(db,'messages'), orderBy('timestamp'));
+  onSnapshot(messagesQuery, snap=>{
     chatBox.innerHTML='';
     snap.forEach(docu=>{
-      const m=docu.data();
-      if(selectedPeer.type==='user'){
-        if((m.from===me.uid && m.to===selectedPeer.id)||(m.from===selectedPeer.id && m.to===me.uid)){
+      const m = docu.data();
+      if(selectedPeer.type === 'user'){
+        if((m.from===me.uid && m.to===selectedPeer.id) || (m.from===selectedPeer.id && m.to===me.uid)){
           renderMessage(m);
-          if(m.from!==me.uid) showNotification(selectedPeer.name,m.type==='text'?m.text:"Bildnachricht");
-        } else if(m.from!==me.uid && m.to===me.uid){
-          unreadCounts[m.from]=(unreadCounts[m.from]||0)+1;
-          updateUnreadBadge(m.from);
+          if(m.from!==me.uid) showNotification(selectedPeer.name, m.type==='text'?m.text:"Bildnachricht");
         }
       } else {
-        if(m.to===selectedPeer.id){
+        if(m.to === selectedPeer.id){
           renderMessage(m);
           if(m.from!==me.uid) showNotification(selectedPeer.name,m.type==='text'?m.text:"Bildnachricht");
         }
       }
     });
-    chatBox.scrollTop=chatBox.scrollHeight;
+    chatBox.scrollTop = chatBox.scrollHeight;
   });
 }
 
@@ -375,15 +356,15 @@ sendImageBtn.addEventListener('click',sendImage);
 
 function updateUnreadBadge(chatId){
   const span=document.getElementById(`unread-${chatId}`);
-  if(span) span.textContent = unreadCounts[chatId]||'';
+  if(span) span.textContent=unreadCounts[chatId]||'';
 }
 
 /* -------------------------
-   WebRTC Calls (Audio/Video)
+   WebRTC Calls
 ------------------------- */
 async function startCall(video=false){
   if(!selectedPeer) return alert("Wähle zuerst einen Chat aus!");
-  videoContainer.style.display = video?"flex":"none";
+  videoContainer.style.display=video?"flex":"none";
   outgoingCallSound.play().catch(()=>{});
 
   try {
@@ -399,7 +380,6 @@ async function startCall(video=false){
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
   pc.ontrack = e => {
-    console.log("Remote Stream:", e.streams[0]);
     remoteVideo.srcObject = e.streams[0];
     remoteAudio.srcObject = e.streams[0];
   };
@@ -418,7 +398,6 @@ async function startCall(video=false){
   onSnapshot(callRef,async snap=>{
     const data = snap.data();
     if(!pc.currentRemoteDescription && data?.answer){
-      console.log("Answer empfangen:", data.answer);
       await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
       outgoingCallSound.pause(); outgoingCallSound.currentTime=0;
     }
@@ -452,7 +431,7 @@ audioCallBtn.onclick = () => startCall(false);
 videoCallBtn.onclick = () => startCall(true);
 endCallBtn.onclick = () => endCall();
 
-/* --- Incoming Calls --- */
+/* Incoming Calls */
 onSnapshot(collection(db,"calls"),snapshot=>{
   snapshot.docChanges().forEach(async change=>{
     const data = change.doc.data();
@@ -469,7 +448,7 @@ onSnapshot(collection(db,"calls"),snapshot=>{
       catch(err){ console.error("Kamera/Mikrofon Fehler:", err); alert("Kamera oder Mikrofon konnte nicht geöffnet werden!"); return; }
 
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-      pc.ontrack = e => { console.log("Remote Stream empfangen:", e.streams[0]); remoteVideo.srcObject = e.streams[0]; remoteAudio.srcObject = e.streams[0]; };
+      pc.ontrack = e => { remoteVideo.srcObject = e.streams[0]; remoteAudio.srcObject = e.streams[0]; };
       videoContainer.style.display = data.video ? "flex" : "none";
 
       const answerCandidates = collection(docRef,"answerCandidates");
@@ -491,6 +470,7 @@ onSnapshot(collection(db,"calls"),snapshot=>{
 
 </body>
 </html>
+
 
 
 
