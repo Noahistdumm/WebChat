@@ -155,7 +155,7 @@ function showNotification(title, body){
   try {
     new Notification(title, { body });
     messageSound.play().catch(()=>{});
-  } catch(e) { /* ignore */ }
+  } catch(e) { /* ignore if notifications blocked */ }
 }
 
 /* -------------------------
@@ -421,22 +421,28 @@ function updateUnreadBadge(chatId){
 }
 
 /* -------------------------
-   WebRTC Calls (Audio/Video) mit STUN+TURN
+   WebRTC Calls (Audio/Video) mit Twilio TURN
    ------------------------- */
 
 /*
  Hinweis:
- Ersetze die TURN-URL/username/credential durch deine eigenen coturn-/Anbieter-Daten
- für produktive/zuverlässige Nutzung.
- (Der hier verwendete TURN-Eintrag ist ein Platzhalter/Testeintrag.)
+ - Du hast das Twilio-Credential angegeben; ich habe es hier direkt verwendet.
+ - Für Produktion: Credentials per HTTPS-Endpunkt dynamisch holen, nicht hardcodiert.
 */
+
+const TWILIO_TURN_CRED = 'QJBE8RSQ71B8Z447JJD4PH28';
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   {
-    urls: 'turn:relay1.expressturn.com:3478',
-    username: 'expressturn',
-    credential: 'expressturn'
+    urls: 'turn:global.turn.twilio.com:3478?transport=udp',
+    username: TWILIO_TURN_CRED,
+    credential: TWILIO_TURN_CRED
+  },
+  {
+    urls: 'turns:global.turn.twilio.com:443?transport=tcp',
+    username: TWILIO_TURN_CRED,
+    credential: TWILIO_TURN_CRED
   }
 ];
 
@@ -555,7 +561,7 @@ onSnapshot(collection(db,"calls"), snapshot => {
       videoContainer.style.display = data.video ? "flex" : "none";
 
       const answerCandidates = collection(docRef,"answerCandidates");
-      pc.onicecandidate = e => { if(e.candidate) addDoc(answerCandidates, e.candidate.toJSON()); };
+      pc.onicecandidate = e => { if(e.candidate) addDoc(answerCandidates,e.candidate.toJSON()); };
 
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
@@ -574,6 +580,7 @@ onSnapshot(collection(db,"calls"), snapshot => {
   });
 });
 </script>
+
 
 
 
