@@ -70,7 +70,7 @@
 <script type="module">
 /* -------------------------
    Firebase & Imports
-   ------------------------- */
+------------------------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import {
   getAuth,
@@ -113,7 +113,7 @@ const storage = getStorage(app);
 
 /* -------------------------
    UI Elemente
-   ------------------------- */
+------------------------- */
 const authArea = document.getElementById('authArea');
 const userArea = document.getElementById('userArea');
 const userInfo = document.getElementById('userInfo');
@@ -141,7 +141,7 @@ const incomingCallSound = new Audio('https://www.soundjay.com/phone/phone-ring-0
 incomingCallSound.loop = true;
 const messageSound = new Audio('https://www.soundjay.com/button/beep-07.mp3');
 
-/* --- Notification --- */
+/* --- Notifications --- */
 let notifyAllowed = false;
 async function requestNotificationPermission(){
   if(!("Notification" in window)) return false;
@@ -155,12 +155,12 @@ function showNotification(title, body){
   try {
     new Notification(title, { body });
     messageSound.play().catch(()=>{});
-  } catch(e) { /* ignore if notifications blocked */ }
+  } catch(e) { }
 }
 
 /* -------------------------
    State
-   ------------------------- */
+------------------------- */
 let me = null;
 let selectedPeer = null;
 let unreadCounts = {};
@@ -169,14 +169,38 @@ let localStream = null;
 let callDoc = null;
 
 /* -------------------------
-   Auth State
-   ------------------------- */
+   Auth Funktionen
+------------------------- */
+window.signup = async () => {
+  const email = document.getElementById('email').value;
+  const pw = document.getElementById('password').value;
+  if(!email || !pw){ alert("E-Mail + Passwort angeben"); return; }
+  try { await createUserWithEmailAndPassword(auth, email, pw); } 
+  catch(e){ alert(e.message || e); }
+};
+
+window.login = async () => {
+  const email = document.getElementById('email').value;
+  const pw = document.getElementById('password').value;
+  if(!email || !pw){ alert("E-Mail + Passwort angeben"); return; }
+  try { await signInWithEmailAndPassword(auth, email, pw); } 
+  catch(e){ alert(e.message || e); }
+};
+
+window.logout = async () => {
+  try { await signOut(auth); } catch(e){ console.error(e); }
+  selectedPeer = null;
+  chatBox.innerHTML = '';
+};
+
+/* -------------------------
+   Auth State Listener
+------------------------- */
 onAuthStateChanged(auth, async user => {
   if(user){
     me = { uid: user.uid, email: user.email, name: (user.email || '').split('@')[0] || 'User' };
-    try {
-      await setDoc(doc(db,'users',me.uid), me, { merge: true });
-    } catch(e) { console.error("Fehler beim Speichern des Users:", e); }
+    try { await setDoc(doc(db,'users',me.uid), me, { merge: true }); } 
+    catch(e) { console.error(e); }
     authArea.style.display = 'none';
     userArea.style.display = 'block';
     userInfo.textContent = `Angemeldet als ${me.name}`;
@@ -193,35 +217,8 @@ onAuthStateChanged(auth, async user => {
 });
 
 /* -------------------------
-   Auth Funktionen
-   ------------------------- */
-window.signup = async () => {
-  const email = document.getElementById('email').value;
-  const pw = document.getElementById('password').value;
-  if(!email || !pw){ alert("E-Mail + Passwort angeben"); return; }
-  try {
-    await createUserWithEmailAndPassword(auth, email, pw);
-  } catch(e) { alert(e.message || e); }
-};
-window.login = async () => {
-  const email = document.getElementById('email').value;
-  const pw = document.getElementById('password').value;
-  if(!email || !pw){ alert("E-Mail + Passwort angeben"); return; }
-  try {
-    await signInWithEmailAndPassword(auth, email, pw);
-  } catch(e) { alert(e.message || e); }
-};
-window.logout = async () => {
-  try {
-    await signOut(auth);
-  } catch(e) { console.error(e); }
-  selectedPeer = null;
-  chatBox.innerHTML = '';
-};
-
-/* -------------------------
    Kontakte & Gruppen
-   ------------------------- */
+------------------------- */
 async function loadContacts(){
   contactsDiv.innerHTML = '';
   try {
@@ -249,10 +246,9 @@ async function loadContacts(){
         contactsDiv.appendChild(div);
       }
     });
-  } catch(e) { console.error("Fehler beim Laden der Kontakte:", e); }
+  } catch(e){ console.error("Fehler beim Laden der Kontakte:", e); }
 }
 
-// Gruppen laden
 async function loadGroups(){
   groupsDiv.innerHTML = '';
   try {
@@ -278,34 +274,12 @@ async function loadGroups(){
       };
       groupsDiv.appendChild(div);
     });
-  } catch(e) { console.error("Fehler beim Laden der Gruppen:", e); }
+  } catch(e){ console.error("Fehler beim Laden der Gruppen:", e); }
 }
 
-/* kleine Hilfsfunktionen */
-window.addContactByName = async () => {
-  const name = document.getElementById('addContactInput').value.trim();
-  if(!name) return alert('Name eingeben');
-  try{
-    const newDoc = doc(collection(db,'users'));
-    await setDoc(doc(db,'users',newDoc.id), { uid: newDoc.id, name, email: `${name}@example.local` });
-    document.getElementById('addContactInput').value = '';
-    loadContacts();
-  }catch(e){ console.error(e); alert('Fehler beim Hinzufügen'); }
-};
-
-window.createGroup = async () => {
-  const gname = document.getElementById('newGroupName').value.trim();
-  if(!gname) return alert('Gruppenname angeben');
-  try{
-    await addDoc(collection(db,'groups'), { name: gname, members: [me.uid], createdAt: Date.now() });
-    document.getElementById('newGroupName').value = '';
-    loadGroups();
-  }catch(e){ console.error(e); alert('Fehler beim Erstellen'); }
-};
-
 /* -------------------------
-   Chat laden und Nachrichten
-   ------------------------- */
+   Chat & Nachrichten
+------------------------- */
 async function loadChat(){
   if(!selectedPeer){ chatTitle.textContent = 'Wähle einen Chat'; callButtons.style.display = 'none'; return; }
   chatTitle.textContent = selectedPeer.name || 'Chat';
@@ -325,7 +299,6 @@ async function loadChat(){
       snap.forEach(docu => {
         const m = docu.data();
         if(selectedPeer.type === 'user'){
-          // Filter: nur Nachrichten zwischen mir und dem Peer
           if((m.from === me.uid && m.to === selectedPeer.id) || (m.from === selectedPeer.id && m.to === me.uid)){
             renderMessage(m);
             if(m.from !== me.uid) showNotification(selectedPeer.name, m.type === 'text' ? m.text : "Bildnachricht");
@@ -334,7 +307,6 @@ async function loadChat(){
             updateUnreadBadge(m.from);
           }
         } else {
-          // Gruppen-Chat: einfache Darstellung (alle Nachrichten mit to === groupId)
           if(m.to === selectedPeer.id){
             renderMessage(m);
             if(m.from !== me.uid) showNotification(selectedPeer.name, m.type === 'text' ? m.text : "Bildnachricht");
@@ -343,10 +315,9 @@ async function loadChat(){
       });
       chatBox.scrollTop = chatBox.scrollHeight;
     });
-  } catch(e) { console.error("Fehler beim Laden des Chats:", e); }
+  } catch(e){ console.error("Fehler beim Laden des Chats:", e); }
 }
 
-/* Nachrichten rendern */
 function renderMessage(m){
   if(m.type === 'image'){
     const img = document.createElement('img');
@@ -365,7 +336,6 @@ function renderMessage(m){
   }
 }
 
-/* Text senden */
 window.sendMessage = async () => {
   if(!selectedPeer){ alert('Chat auswählen'); return; }
   const text = messageInput.value.trim();
@@ -373,10 +343,10 @@ window.sendMessage = async () => {
   try {
     await addDoc(collection(db,'messages'), { from: me.uid, to: selectedPeer.id, type: 'text', text, timestamp: Date.now() });
     messageInput.value = '';
-  } catch(e) { console.error("Fehler beim Senden:", e); alert('Senden fehlgeschlagen'); }
+  } catch(e){ console.error("Fehler beim Senden:", e); alert('Senden fehlgeschlagen'); }
 };
 
-/* Image preview + Upload-Funktion */
+/* Image Upload */
 imageInput.addEventListener('change', () => {
   const file = imageInput.files[0];
   if(file){
@@ -414,36 +384,27 @@ window.sendImage = async () => {
 };
 sendImageBtn.addEventListener('click', sendImage);
 
-/* unread badge helper */
 function updateUnreadBadge(chatId){
   const span = document.getElementById('unread-' + chatId);
   if(span) span.textContent = unreadCounts[chatId] || '';
 }
 
 /* -------------------------
-   WebRTC Calls (Audio/Video) mit Twilio TURN
+   WebRTC Audio/Video Calls
 ------------------------- */
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
-  {
-    urls: 'turn:thomas-winter-thunder-8011.fly.dev:3478',
-    username: 'webrtcuser',
-    credential: 'supersecurepass'
-  }
+  { urls: 'turn:thomas-winter-thunder-8011.fly.dev:3478', username: 'webrtcuser', credential: 'supersecurepass' }
 ];
 
 async function startCall(video = false){
-  if(!selectedPeer) return alert("Wähle zuerst einen Chat aus!");
-
-  // UI vorbereiten
-  videoContainer.style.display = video ? "flex" : "none";
-  localVideo.style.display = video ? "block" : "none";
-  remoteVideo.style.display = video ? "block" : "none";
-  outgoingCallSound.play().catch(()=>{});
+  if(!selectedPeer){ alert("Wähle zuerst einen Chat aus!"); return; }
 
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: video });
     localVideo.srcObject = localStream;
+    videoContainer.style.display = video ? "flex" : "none";
+    outgoingCallSound.play().catch(()=>{});
   } catch(err) {
     console.error("Kamera/Mikrofon Fehler:", err);
     alert("Kamera oder Mikrofon konnte nicht geöffnet werden!");
@@ -451,22 +412,11 @@ async function startCall(video = false){
   }
 
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
   pc.ontrack = e => {
-    console.log("Remote Stream empfangen:", e.streams[0]);
-
-    // Video
     remoteVideo.srcObject = e.streams[0];
-
-    // Audio
     remoteAudio.srcObject = e.streams[0];
-    remoteAudio.volume = 1.0;
-    remoteAudio.muted = false;
-    remoteAudio.play().catch(err => {
-      console.warn("Autoplay Audio blockiert, bitte klicken Sie einmal auf die Seite:", err);
-    });
   };
 
   const callRef = doc(collection(db,"calls"));
@@ -485,8 +435,8 @@ async function startCall(video = false){
   onSnapshot(callRef, async snap => {
     const data = snap.data();
     if(!pc.currentRemoteDescription && data?.answer){
-      try { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); } 
-      catch(e) { console.error("Fehler beim Setzen der RemoteDescription (Caller):", e); }
+      try { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); }
+      catch(e){ console.error("RemoteDescription Fehler:", e); }
       outgoingCallSound.pause(); outgoingCallSound.currentTime = 0;
     }
   });
@@ -495,7 +445,7 @@ async function startCall(video = false){
     snap.docChanges().forEach(change => {
       if(change.type === "added") {
         try { pc.addIceCandidate(new RTCIceCandidate(change.doc.data())); }
-        catch(e) { console.error("Fehler beim Hinzufügen der ICE-Kandidaten (Caller):", e); }
+        catch(e) { console.error("ICE-Kandidaten Fehler:", e); }
       }
     });
   });
@@ -506,10 +456,9 @@ async function startCall(video = false){
 }
 
 async function endCall(){
-  try {
-    if(pc) pc.close();
-    if(localStream) localStream.getTracks().forEach(t => t.stop());
-  } catch(e){ console.error(e); }
+  if(pc) pc.close();
+  if(localStream) localStream.getTracks().forEach(t => t.stop());
+
   pc = null;
   localStream = null;
   videoContainer.style.display = "none";
@@ -518,8 +467,9 @@ async function endCall(){
   endCallBtn.style.display = "none";
   outgoingCallSound.pause(); outgoingCallSound.currentTime = 0;
   incomingCallSound.pause(); incomingCallSound.currentTime = 0;
+
   if(callDoc){
-    try { await updateDoc(callDoc, { active: false }); } catch(e) { /* ignore */ }
+    try { await updateDoc(callDoc, { active: false }); } catch(e){ }
     callDoc = null;
   }
 }
@@ -528,7 +478,9 @@ audioCallBtn.onclick = () => startCall(false);
 videoCallBtn.onclick = () => startCall(true);
 endCallBtn.onclick = () => endCall();
 
-/* --- Incoming Calls --- */
+/* -------------------------
+   Incoming Calls
+------------------------- */
 onSnapshot(collection(db,"calls"), snapshot => {
   snapshot.docChanges().forEach(async change => {
     const data = change.doc.data();
@@ -538,9 +490,10 @@ onSnapshot(collection(db,"calls"), snapshot => {
       const accept = confirm(`${data.video ? "Video" : "Audio"}-Anruf von ${data.from}. Annehmen?`);
       if(!accept){
         incomingCallSound.pause(); incomingCallSound.currentTime = 0;
-        try { await updateDoc(docRef, { active: false }); } catch(e) { }
+        try { await updateDoc(docRef, { active: false }); } catch(e){ }
         return;
       }
+
       incomingCallSound.pause(); incomingCallSound.currentTime = 0;
 
       pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -548,93 +501,14 @@ onSnapshot(collection(db,"calls"), snapshot => {
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: data.video });
         localVideo.srcObject = localStream;
-      } catch(err) {
+      } catch(err){
         console.error("Kamera/Mikrofon Fehler:", err);
         alert("Kamera oder Mikrofon konnte nicht geöffnet werden!");
         return;
       }
 
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-      pc.ontrack = e => {
-        console.log("Remote Stream empfangen:", e.streams[0]);
-        remoteVideo.srcObject = e.streams[0];
-        remoteAudio.srcObject = e.streams[0];
-        remoteAudio.volume = 1.0;
-        remoteAudio.muted = false;
-        remoteAudio.play().catch(err => console.warn("Autoplay Audio blockiert:", err));
-        videoContainer.style.display = data.video ? "flex" : "none";
-      };
-
-      const answerCandidates = collection(docRef,"answerCandidates");
-      pc.onicecandidate = e => { if(e.candidate) addDoc(answerCandidates,e.candidate.toJSON()); };
-
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answerDesc = await pc.createAnswer();
-        await pc.setLocalDescription(answerDesc);
-        await updateDoc(docRef, { answer: { type: answerDesc.type, sdp: answerDesc.sdp }, active: true });
-      } catch(e) { console.error("Fehler beim Beantworten des Calls:", e); }
-
-      callDoc = docRef;
-      audioCallBtn.style.display = "none";
-      videoCallBtn.style.display = "none";
-      endCallBtn.style.display = "inline-block";
-    }
-  });
-});
-
-async function endCall(){
-  try {
-    if(pc) pc.close();
-    if(localStream) localStream.getTracks().forEach(t => t.stop());
-  } catch(e){ console.error(e); }
-  pc = null;
-  localStream = null;
-  videoContainer.style.display = "none";
-  audioCallBtn.style.display = "inline-block";
-  videoCallBtn.style.display = "inline-block";
-  endCallBtn.style.display = "none";
-  outgoingCallSound.pause(); outgoingCallSound.currentTime = 0;
-  incomingCallSound.pause(); incomingCallSound.currentTime = 0;
-  if(callDoc){
-    try { await updateDoc(callDoc, { active: false }); } catch(e) { /* ignore */ }
-    callDoc = null;
-  }
-}
-
-audioCallBtn.onclick = () => startCall(false);
-videoCallBtn.onclick = () => startCall(true);
-endCallBtn.onclick = () => endCall();
-
-/* --- Incoming Calls --- */
-onSnapshot(collection(db,"calls"), snapshot => {
-  snapshot.docChanges().forEach(async change => {
-    const data = change.doc.data();
-    const docRef = change.doc.ref;
-    if(change.type === "added" && data.to === me?.uid && !pc && data.active){
-      incomingCallSound.play().catch(()=>{});
-      const accept = confirm(`${data.video ? "Video" : "Audio"}-Anruf von ${data.from}. Annehmen?`);
-      if(!accept){
-        incomingCallSound.pause(); incomingCallSound.currentTime = 0;
-        try { await updateDoc(docRef, { active: false }); } catch(e) { /* ignore */ }
-        return;
-      }
-      incomingCallSound.pause(); incomingCallSound.currentTime = 0;
-
-      pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: data.video });
-        localVideo.srcObject = localStream;
-      } catch(err) {
-        console.error("Kamera/Mikrofon Fehler:", err);
-        alert("Kamera oder Mikrofon konnte nicht geöffnet werden!");
-        return;
-      }
-
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-      pc.ontrack = e => { console.log("Remote Stream empfangen:", e.streams[0]); remoteVideo.srcObject = e.streams[0]; remoteAudio.srcObject = e.streams[0]; };
+      pc.ontrack = e => { remoteVideo.srcObject = e.streams[0]; remoteAudio.srcObject = e.streams[0]; };
       videoContainer.style.display = data.video ? "flex" : "none";
 
       const answerCandidates = collection(docRef,"answerCandidates");
@@ -645,9 +519,7 @@ onSnapshot(collection(db,"calls"), snapshot => {
         const answerDesc = await pc.createAnswer();
         await pc.setLocalDescription(answerDesc);
         await updateDoc(docRef, { answer: { type: answerDesc.type, sdp: answerDesc.sdp }, active: true });
-      } catch(e) {
-        console.error("Fehler beim Beantworten des Calls:", e);
-      }
+      } catch(e){ console.error("Fehler beim Beantworten des Calls:", e); }
 
       callDoc = docRef;
       audioCallBtn.style.display = "none";
@@ -657,6 +529,7 @@ onSnapshot(collection(db,"calls"), snapshot => {
   });
 });
 </script>
+
 
 
 
