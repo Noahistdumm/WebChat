@@ -1,5 +1,3 @@
-
-Du:
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -73,10 +71,10 @@ Du:
 <script type="module">
 /* -------------------------
    Firebase & Imports
-   ------------------------- */
+------------------------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, collection, addDoc, query, where, getDocs, onSnapshot, orderBy, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, collection, addDoc, query, where, getDocs, onSnapshot, orderBy, updateDoc } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-storage.js";
 
 /* --- FIREBASE CONFIG --- */
@@ -98,7 +96,7 @@ const storage = getStorage(app);
 
 /* -------------------------
    UI Elemente
-   ------------------------- */
+------------------------- */
 const authArea = document.getElementById('authArea');
 const userArea = document.getElementById('userArea');
 const userInfo = document.getElementById('userInfo');
@@ -119,14 +117,14 @@ const imageInput = document.getElementById('imageInput');
 const sendImageBtn = document.getElementById('sendImageBtn');
 const previewImg = document.getElementById('previewImg');
 
-/* --- Sounds (bleiben unverändert) --- */
+/* --- Sounds --- */
 const outgoingCallSound = new Audio('https://www.soundjay.com/phone/phone-dial-01.mp3');
 outgoingCallSound.loop = true;
 const incomingCallSound = new Audio('https://www.soundjay.com/phone/phone-ring-01.mp3');
 incomingCallSound.loop = true;
 const messageSound = new Audio('https://www.soundjay.com/button/beep-07.mp3');
 
-/* --- Notification --- */
+/* --- Notifications --- */
 let notifyAllowed = false;
 async function requestNotificationPermission(){
   if(!("Notification" in window)) return false;
@@ -143,7 +141,7 @@ function showNotification(title, body){
 
 /* -------------------------
    State
-   ------------------------- */
+------------------------- */
 let me = null;
 let selectedPeer = null;
 let unreadCounts = {};
@@ -153,14 +151,14 @@ let callDoc = null;
 
 /* -------------------------
    Auth State
-   ------------------------- */
+------------------------- */
 onAuthStateChanged(auth, async user => {
   if(user){
     me = { uid: user.uid, email: user.email, name: user.email.split('@')[0] };
     await setDoc(doc(db,'users',me.uid), me, {merge:true});
     authArea.style.display='none';
     userArea.style.display='block';
-    userInfo.textContent=Angemeldet als ${me.name};
+    userInfo.textContent = `Angemeldet als ${me.name}`;
     loadContacts();
     loadGroups();
     chatTitle.textContent='Wähle einen Chat';
@@ -175,40 +173,40 @@ onAuthStateChanged(auth, async user => {
 
 /* -------------------------
    Auth Funktionen
-   ------------------------- */
-window.signup=async()=>{
-  const email=document.getElementById('email').value;
-  const pw=document.getElementById('password').value;
+------------------------- */
+window.signup = async ()=>{
+  const email = document.getElementById('email').value;
+  const pw = document.getElementById('password').value;
   if(!email||!pw){alert("E-Mail + Passwort angeben"); return;}
   try{ await createUserWithEmailAndPassword(auth,email,pw);}catch(e){alert(e.message);}
 };
-window.login=async()=>{
-  const email=document.getElementById('email').value;
-  const pw=document.getElementById('password').value;
+window.login = async ()=>{
+  const email = document.getElementById('email').value;
+  const pw = document.getElementById('password').value;
   if(!email||!pw){alert("E-Mail + Passwort angeben"); return;}
   try{ await signInWithEmailAndPassword(auth,email,pw);}catch(e){alert(e.message);}
 };
-window.logout=async()=>{ await signOut(auth); selectedPeer=null; chatBox.innerHTML=''; };
+window.logout = async ()=>{ await signOut(auth); selectedPeer=null; chatBox.innerHTML=''; };
 
 /* -------------------------
    Kontakte & Gruppen
-   ------------------------- */
+------------------------- */
 async function loadContacts(){
   contactsDiv.innerHTML='';
-  const q=query(collection(db,'users'));
-  const snap=await getDocs(q);
+  const q = query(collection(db,'users'));
+  const snap = await getDocs(q);
   snap.forEach(docu=>{
-    const u=docu.data();
+    const u = docu.data();
     if(u.uid!==me.uid){
-      const div=document.createElement('div');
-      const nameSpan=document.createElement('span');
-      nameSpan.textContent=u.name;
-      const countSpan=document.createElement('span');
-      countSpan.id=unread-${u.uid};
-      countSpan.textContent=unreadCounts[u.uid]||'';
+      const div = document.createElement('div');
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = u.name;
+      const countSpan = document.createElement('span');
+      countSpan.id = `unread-${u.uid}`;
+      countSpan.textContent = unreadCounts[u.uid]||'';
       div.appendChild(nameSpan);
       div.appendChild(countSpan);
-      div.onclick=()=>{
+      div.onclick = ()=>{
         selectedPeer={type:'user',id:u.uid,name:u.name};
         unreadCounts[u.uid]=0;
         updateUnreadBadge(u.uid);
@@ -219,22 +217,21 @@ async function loadContacts(){
   });
 }
 
-// einfache Implementierung: Gruppen laden (falls du Gruppen anlegst)
 async function loadGroups(){
   groupsDiv.innerHTML='';
-  const q=query(collection(db,'groups'),where('members','array-contains',me.uid));
-  const snap=await getDocs(q);
+  const q = query(collection(db,'groups'), where('members','array-contains',me.uid));
+  const snap = await getDocs(q);
   snap.forEach(docu=>{
-    const g=docu.data();
-    const div=document.createElement('div');
-    const nameSpan=document.createElement('span');
-    nameSpan.textContent=g.name;
-    const countSpan=document.createElement('span');
-    countSpan.id=unread-${docu.id};
-    countSpan.textContent=unreadCounts[docu.id]||'';
+    const g = docu.data();
+    const div = document.createElement('div');
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = g.name;
+    const countSpan = document.createElement('span');
+    countSpan.id = `unread-${docu.id}`;
+    countSpan.textContent = unreadCounts[docu.id]||'';
     div.appendChild(nameSpan);
     div.appendChild(countSpan);
-    div.onclick=()=>{
+    div.onclick = ()=>{
       selectedPeer={type:'group',id:docu.id,name:g.name};
       unreadCounts[docu.id]=0;
       updateUnreadBadge(docu.id);
@@ -244,14 +241,12 @@ async function loadGroups(){
   });
 }
 
-/* (optionale) kleine Hilfsfunktionen, damit die Buttons nicht leer bleiben */
 window.addContactByName = async () => {
   const name = document.getElementById('addContactInput').value.trim();
   if(!name) return alert('Name eingeben');
-  // erzeugt einen Platzhalter-User (nur lokal/Firestore demo). In echtem Projekt würde Registrierung erfolgen.
   try{
     const newDoc = doc(collection(db,'users'));
-    await setDoc(doc(db,'users',newDoc.id), { uid: newDoc.id, name, email: ${name}@example.local });
+    await setDoc(newDoc, { uid: newDoc.id, name, email: `${name}@example.local` });
     document.getElementById('addContactInput').value='';
     loadContacts();
   }catch(e){ console.error(e); alert('Fehler beim Hinzufügen'); }
@@ -269,18 +264,27 @@ window.createGroup = async () => {
 
 /* -------------------------
    Chat laden und Nachrichten
-   ------------------------- */
+------------------------- */
 async function loadChat(){
   if(!selectedPeer){ chatTitle.textContent='Wähle einen Chat'; callButtons.style.display='none'; return; }
-  chatTitle.textContent=selectedPeer.name;
-  callButtons.style.display=selectedPeer.type==='user'?'flex':'none';
+  chatTitle.textContent = selectedPeer.name;
+  callButtons.style.display = selectedPeer.type==='user'?'flex':'none';
   chatBox.innerHTML='';
 
   let messagesQuery;
   if(selectedPeer.type==='user'){
-    messagesQuery=query(collection(db,'messages'),orderBy('timestamp'));
+    messagesQuery = query(
+      collection(db,'messages'),
+      where('from','in',[me.uid, selectedPeer.id]),
+      where('to','in',[me.uid, selectedPeer.id]),
+      orderBy('timestamp')
+    );
   } else {
-    messagesQuery=query(collection(db,'messages'),where('to','==',selectedPeer.id),orderBy('timestamp'));
+    messagesQuery = query(
+      collection(db,'messages'),
+      where('to','==',selectedPeer.id),
+      orderBy('timestamp')
+    );
   }
 
   onSnapshot(messagesQuery,snap=>{
@@ -306,58 +310,52 @@ async function loadChat(){
   });
 }
 
-/* Nachrichten rendern */
 function renderMessage(m){
   if(m.type==='image'){
-    const img=document.createElement('img');
-    img.src=m.url;
-    img.className='chat-img message '+(m.from===me.uid?'sent':'received');
+    const img = document.createElement('img');
+    img.src = m.url;
+    img.className = 'chat-img message '+(m.from===me.uid?'sent':'received');
     img.style.maxWidth='200px';
     img.style.borderRadius='8px';
     img.style.margin='5px';
     chatBox.appendChild(img);
   } else {
-    const div=document.createElement('div');
-    div.textContent=m.text;
-    div.className='message '+(m.from===me.uid?'sent':'received');
+    const div = document.createElement('div');
+    div.textContent = m.text;
+    div.className = 'message '+(m.from===me.uid?'sent':'received');
     chatBox.appendChild(div);
   }
 }
 
-/* Text senden */
-window.sendMessage=async()=>{
+window.sendMessage = async ()=>{
   if(!selectedPeer){alert('Chat auswählen'); return;}
-  const text=messageInput.value.trim();
+  const text = messageInput.value.trim();
   if(!text) return;
   await addDoc(collection(db,'messages'),{from:me.uid,to:selectedPeer.id,type:'text',text,timestamp:Date.now()});
   messageInput.value='';
 };
 
-/* Image preview + Upload-Funktion (Firebase Storage -> getDownloadURL -> messages) */
 imageInput.addEventListener('change',()=>{
-  const file=imageInput.files[0];
+  const file = imageInput.files[0];
   if(file){
-    previewImg.src=URL.createObjectURL(file);
+    previewImg.src = URL.createObjectURL(file);
     previewImg.style.display='block';
   } else previewImg.style.display='none';
 });
 
-window.sendImage=async()=>{
+window.sendImage = async ()=>{
   if(!selectedPeer){alert('Chat auswählen'); return;}
-  const file=imageInput.files[0];
+  const file = imageInput.files[0];
   if(!file){alert('Keine Datei gewählt'); return;}
 
   try {
-    // sauberer Dateiname
-    const cleanName=file.name.replace(/[^\w.-]/g,"_");
-    const path = chatImages/${me.uid}_${Date.now()}_${cleanName};
+    const cleanName = file.name.replace(/[^\w.-]/g,"_");
+    const path = `chatImages/${me.uid}_${Date.now()}_${cleanName}`;
     const storageRef = ref(storage, path);
 
-    // Upload
     const snapshot = await uploadBytes(storageRef, file);
     const url = await getDownloadURL(snapshot.ref);
 
-    // Message in Firestore speichern (nur die URL)
     await addDoc(collection(db,'messages'),{
       from: me.uid,
       to: selectedPeer.id,
@@ -366,7 +364,6 @@ window.sendImage=async()=>{
       timestamp: Date.now()
     });
 
-    // UI cleanup
     imageInput.value='';
     previewImg.style.display='none';
   } catch (err) {
@@ -376,18 +373,17 @@ window.sendImage=async()=>{
 };
 sendImageBtn.addEventListener('click',sendImage);
 
-/* unread badge helper */
 function updateUnreadBadge(chatId){
-  const span=document.getElementById(unread-${chatId});
-  if(span) span.textContent=unreadCounts[chatId]||'';
+  const span=document.getElementById(`unread-${chatId}`);
+  if(span) span.textContent = unreadCounts[chatId]||'';
 }
 
 /* -------------------------
    WebRTC Calls (Audio/Video)
-   ------------------------- */
+------------------------- */
 async function startCall(video=false){
   if(!selectedPeer) return alert("Wähle zuerst einen Chat aus!");
-  videoContainer.style.display=video?"flex":"none";
+  videoContainer.style.display = video?"flex":"none";
   outgoingCallSound.play().catch(()=>{});
 
   try {
@@ -405,7 +401,7 @@ async function startCall(video=false){
   pc.ontrack = e => {
     console.log("Remote Stream:", e.streams[0]);
     remoteVideo.srcObject = e.streams[0];
-    remoteAudio.srcObject = e.streams[0]; // wichtig damit Audio auch abgespielt wird
+    remoteAudio.srcObject = e.streams[0];
   };
 
   const callRef = doc(collection(db,"calls"));
@@ -456,14 +452,14 @@ audioCallBtn.onclick = () => startCall(false);
 videoCallBtn.onclick = () => startCall(true);
 endCallBtn.onclick = () => endCall();
 
-/* --- Incoming Calls (wie in deinem Original) --- */
+/* --- Incoming Calls --- */
 onSnapshot(collection(db,"calls"),snapshot=>{
   snapshot.docChanges().forEach(async change=>{
     const data = change.doc.data();
     const docRef = change.doc.ref;
     if(change.type==="added" && data.to===me?.uid && !pc && data.active){
       incomingCallSound.play().catch(()=>{});
-      const accept = confirm(${data.video ? "Video" : "Audio"}-Anruf von ${data.from}. Annehmen?);
+      const accept = confirm(`${data.video ? "Video" : "Audio"}-Anruf von ${data.from}. Annehmen?`);
       if(!accept){ incomingCallSound.pause(); incomingCallSound.currentTime=0; await updateDoc(docRef,{active:false}); return; }
       incomingCallSound.pause(); incomingCallSound.currentTime=0;
 
@@ -495,6 +491,7 @@ onSnapshot(collection(db,"calls"),snapshot=>{
 
 </body>
 </html>
+
 
 
 
