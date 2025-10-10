@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebChat Deluxe V1.2.6</title>
+<title>WebChat Deluxe V1.2.7</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.2.6</h2>
+    <h2>WebChat Deluxe V1.2.7</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -57,13 +57,15 @@
       <img id="previewImg" style="display:none;">
     </div>
 
-    <!-- Video Call UI -->
+    <!-- Video + Audio Container -->
     <div id="videoContainer" style="display:none;flex-direction:column;align-items:center;margin-top:10px;">
       <video id="localVideo" autoplay muted playsinline style="width:40%;border-radius:10px;"></video>
       <video id="remoteVideo" autoplay playsinline style="width:40%;border-radius:10px;margin-top:10px;"></video>
     </div>
+    <audio id="remoteAudio" autoplay playsinline></audio>
   </div>
 </div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
@@ -102,6 +104,7 @@ const endCallBtn = document.getElementById('endCallBtn');
 const videoContainer = document.getElementById('videoContainer');
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
+const remoteAudio = document.getElementById('remoteAudio');
 const messageInput = document.getElementById('messageInput');
 const imageInput = document.getElementById('imageInput');
 const sendImageBtn = document.getElementById('sendImageBtn');
@@ -157,7 +160,7 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
-// --- Auth ---
+// --- Auth Funktionen ---
 window.signup=async()=>{
   const email=document.getElementById('email').value;
   const pw=document.getElementById('password').value;
@@ -172,7 +175,7 @@ window.login=async()=>{
 };
 window.logout=async()=>{ await signOut(auth); selectedPeer=null; chatBox.innerHTML=''; };
 
-// --- Kontakte ---
+// --- Kontakte & Gruppen ---
 async function loadContacts(){
   contactsDiv.innerHTML='';
   const q=query(collection(db,'users'));
@@ -181,25 +184,15 @@ async function loadContacts(){
     const u=docu.data();
     if(u.uid!==me.uid){
       const div=document.createElement('div');
-      const nameSpan=document.createElement('span');
-      nameSpan.textContent=u.name;
-      const countSpan=document.createElement('span');
-      countSpan.id=`unread-${u.uid}`;
-      countSpan.textContent=unreadCounts[u.uid]||'';
-      div.appendChild(nameSpan);
-      div.appendChild(countSpan);
+      div.textContent=u.name;
       div.onclick=()=>{
         selectedPeer={type:'user',id:u.uid,name:u.name};
-        unreadCounts[u.uid]=0;
-        updateUnreadBadge(u.uid);
         loadChat();
       };
       contactsDiv.appendChild(div);
     }
   });
 }
-
-// --- Gruppen ---
 async function loadGroups(){
   groupsDiv.innerHTML='';
   const q=query(collection(db,'groups'),where('members','array-contains',me.uid));
@@ -207,17 +200,9 @@ async function loadGroups(){
   snap.forEach(docu=>{
     const g=docu.data();
     const div=document.createElement('div');
-    const nameSpan=document.createElement('span');
-    nameSpan.textContent=g.name;
-    const countSpan=document.createElement('span');
-    countSpan.id=`unread-${docu.id}`;
-    countSpan.textContent=unreadCounts[docu.id]||'';
-    div.appendChild(nameSpan);
-    div.appendChild(countSpan);
+    div.textContent=g.name;
     div.onclick=()=>{
       selectedPeer={type:'group',id:docu.id,name:g.name};
-      unreadCounts[docu.id]=0;
-      updateUnreadBadge(docu.id);
       loadChat();
     };
     groupsDiv.appendChild(div);
@@ -245,38 +230,29 @@ async function loadChat(){
       if(selectedPeer.type==='user'){
         if((m.from===me.uid && m.to===selectedPeer.id)||(m.from===selectedPeer.id && m.to===me.uid)){
           renderMessage(m);
-          if(m.from!==me.uid) showNotification(selectedPeer.name,m.type==='text'?m.text:"Bildnachricht");
-        } else if(m.from!==me.uid && m.to===me.uid){
-          unreadCounts[m.from]=(unreadCounts[m.from]||0)+1;
-          updateUnreadBadge(m.from);
         }
       } else {
-        if(m.to===selectedPeer.id){
-          renderMessage(m);
-          if(m.from!==me.uid) showNotification(selectedPeer.name,m.type==='text'?m.text:"Bildnachricht");
-        }
+        if(m.to===selectedPeer.id){ renderMessage(m); }
       }
     });
     chatBox.scrollTop=chatBox.scrollHeight;
   });
 }
 
-// --- Nachrichten rendern ---
+// --- Nachrichten ---
 function renderMessage(m){
+  const div=document.createElement('div');
   if(m.type==='image'){
     const img=document.createElement('img');
     img.src=m.url;
     img.className='chat-img message '+(m.from===me.uid?'sent':'received');
-    chatBox.appendChild(img);
+    div.appendChild(img);
   } else {
-    const div=document.createElement('div');
     div.textContent=m.text;
     div.className='message '+(m.from===me.uid?'sent':'received');
-    chatBox.appendChild(div);
   }
+  chatBox.appendChild(div);
 }
-
-// --- Text senden ---
 window.sendMessage=async()=>{
   if(!selectedPeer){alert('Chat auswählen'); return;}
   const text=messageInput.value.trim();
@@ -284,17 +260,7 @@ window.sendMessage=async()=>{
   await addDoc(collection(db,'messages'),{from:me.uid,to:selectedPeer.id,type:'text',text,timestamp:Date.now()});
   messageInput.value='';
 };
-
-// --- Bild senden ---
-imageInput.addEventListener('change',()=>{
-  const file=imageInput.files[0];
-  if(file){
-    previewImg.src=URL.createObjectURL(file);
-    previewImg.style.display='block';
-  } else previewImg.style.display='none';
-});
-
-window.sendImage=async()=>{
+sendImageBtn.addEventListener('click',async()=>{
   if(!selectedPeer){alert('Chat auswählen'); return;}
   const file=imageInput.files[0];
   if(!file){alert('Keine Datei gewählt'); return;}
@@ -304,16 +270,9 @@ window.sendImage=async()=>{
   const url=await getDownloadURL(snapshot.ref);
   await addDoc(collection(db,'messages'),{from:me.uid,to:selectedPeer.id,type:'image',url,timestamp:Date.now()});
   imageInput.value=''; previewImg.style.display='none';
-};
-sendImageBtn.addEventListener('click',sendImage);
+});
 
-// --- Unread Badge ---
-function updateUnreadBadge(chatId){
-  const span=document.getElementById(`unread-${chatId}`);
-  if(span) span.textContent=unreadCounts[chatId]||'';
-}
-
-// --- WebRTC Calls ---
+// --- WebRTC ---
 async function startCall(video=false){
   if(!selectedPeer) return alert("Wähle zuerst einen Chat aus!");
   videoContainer.style.display=video?"flex":"none";
@@ -323,7 +282,6 @@ async function startCall(video=false){
     localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:video});
     localVideo.srcObject = localStream;
   } catch(err) {
-    console.error("Kamera/Mikrofon Fehler:", err);
     alert("Kamera oder Mikrofon konnte nicht geöffnet werden!");
     return;
   }
@@ -332,8 +290,9 @@ async function startCall(video=false){
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
   pc.ontrack = e => {
-    console.log("Remote Stream:", e.streams[0]);
+    console.log("Remote Stream empfangen:", e.streams[0]);
     remoteVideo.srcObject = e.streams[0];
+    remoteAudio.srcObject = e.streams[0]; // 🔊 Wichtig für Audio-Calls
   };
 
   const callRef = doc(collection(db,"calls"));
@@ -350,7 +309,6 @@ async function startCall(video=false){
   onSnapshot(callRef,async snap=>{
     const data = snap.data();
     if(!pc.currentRemoteDescription && data?.answer){
-      console.log("Answer empfangen:", data.answer);
       await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
       outgoingCallSound.pause(); outgoingCallSound.currentTime=0;
     }
@@ -392,16 +350,19 @@ onSnapshot(collection(db,"calls"),snapshot=>{
     if(change.type==="added" && data.to===me?.uid && !pc && data.active){
       incomingCallSound.play().catch(()=>{});
       const accept = confirm(`${data.video ? "Video" : "Audio"}-Anruf von ${data.from}. Annehmen?`);
-      if(!accept){ incomingCallSound.pause(); incomingCallSound.currentTime=0; await updateDoc(docRef,{active:false}); return; }
-      incomingCallSound.pause(); incomingCallSound.currentTime=0;
+      if(!accept){ incomingCallSound.pause(); await updateDoc(docRef,{active:false}); return; }
+      incomingCallSound.pause();
 
       pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
 
-      try { localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:data.video}); localVideo.srcObject = localStream; } 
-      catch(err){ console.error("Kamera/Mikrofon Fehler:", err); alert("Kamera oder Mikrofon konnte nicht geöffnet werden!"); return; }
-
+      localStream = await navigator.mediaDevices.getUserMedia({audio:true, video:data.video});
+      localVideo.srcObject = localStream;
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-      pc.ontrack = e => { console.log("Remote Stream empfangen:", e.streams[0]); remoteVideo.srcObject = e.streams[0]; };
+
+      pc.ontrack = e => {
+        remoteVideo.srcObject = e.streams[0];
+        remoteAudio.srcObject = e.streams[0];
+      };
       videoContainer.style.display = data.video ? "flex" : "none";
 
       const answerCandidates = collection(docRef,"answerCandidates");
@@ -420,14 +381,5 @@ onSnapshot(collection(db,"calls"),snapshot=>{
   });
 });
 </script>
-p
-
-
 </body>
 </html>
-
-
-
-
-
-
