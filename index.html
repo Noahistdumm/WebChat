@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>WebChat Deluxe V1.2.10</title>
+  <title>WebChat Deluxe V1.3</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.2.10</h2>
+    <h2>WebChat Deluxe V1.3</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -430,21 +430,15 @@ function updateUnreadBadge(chatId){
  - Für Produktion: Credentials per HTTPS-Endpunkt dynamisch holen, nicht hardcodiert.
 */
 
-const TWILIO_TURN_CRED = 'QJBE8RSQ71B8Z447JJD4PH28';
-
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   {
-    urls: 'turn:global.turn.twilio.com:3478?transport=udp',
-    username: TWILIO_TURN_CRED,
-    credential: TWILIO_TURN_CRED
-  },
-  {
-    urls: 'turns:global.turn.twilio.com:443?transport=tcp',
-    username: TWILIO_TURN_CRED,
-    credential: TWILIO_TURN_CRED
+    urls: 'turn:thomas-winter-thunder-8011.fly.dev:3478',
+    username: 'webrtcuser',
+    credential: 'supersecurepass'
   }
 ];
+
 
 async function startCall(video = false){
   if(!selectedPeer) return alert("Wähle zuerst einen Chat aus!");
