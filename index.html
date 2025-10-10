@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>WebChat Deluxe V1.3</title>
+  <title>WebChat Deluxe V1.3.1</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.3</h2>
+    <h2>WebChat Deluxe V1.3.1</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -458,11 +458,23 @@ async function startCall(video = false){
 
   localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-  pc.ontrack = e => {
-    console.log("Remote Stream:", e.streams[0]);
+pc.ontrack = e => {
+    console.log("Remote Stream empfangen:", e.streams[0]);
+
+    // Video anzeigen
     remoteVideo.srcObject = e.streams[0];
+
+    // Audio abspielen
     remoteAudio.srcObject = e.streams[0];
-  };
+    remoteAudio.volume = 1.0; // volle Lautstärke
+    remoteAudio.muted = false; // sicherstellen, dass es nicht stumm ist
+
+    // Audio starten (Autoplay-Schutz umgehen)
+    remoteAudio.play().catch(err => {
+        console.warn("Autoplay Audio blockiert, bitte klicken Sie einmal auf die Seite:", err);
+    });
+};
+
 
   const callRef = doc(collection(db,"calls"));
   callDoc = callRef;
