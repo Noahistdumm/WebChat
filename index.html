@@ -3,14 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>WebChat Deluxe V1.3.1.3</title>
+  <title>WebChat Deluxe V1.3.2</title>
   <link rel="stylesheet" href="styles.css">
+  <!--
+    WebChat Deluxe V1.3.2
+    - HTML + eingebettetes JavaScript (main.js inline) für einfache Nutzung als index.html
+    - Fehlerkorrekturen und stabiler Bildversand via Firebase Storage
+    - Hinweise: styles.css wird verwendet (du hast gesagt, du hast schon eine)
+  -->
 </head>
 <body>
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.3.1.3</h2>
+    <h2>WebChat Deluxe V1.3.2</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -35,7 +41,6 @@
   </div>
 
   <div class="main">
-    <!-- Header mit Call-Buttons -->
     <div id="chatHeader" class="chat-header">
       <h3 id="chatTitle">Bitte anmelden</h3>
       <div class="call-buttons" id="callButtons" style="display:none;">
@@ -47,30 +52,29 @@
 
     <div id="chatBox" class="chat-box"></div>
 
-    <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px;">
-      <div style="display:flex;gap:8px;">
-        <input id="messageInput" placeholder="Nachricht..." style="flex:1">
+    <div class="chat-input-area">
+      <div class="chat-input-row">
+        <input id="messageInput" placeholder="Nachricht...">
         <input type="file" id="imageInput" accept="image/*">
         <button type="button" onclick="sendMessage()">Senden</button>
         <button type="button" id="sendImageBtn">Bild senden</button>
       </div>
-      <img id="previewImg" style="display:none;max-width:200px;border-radius:8px;">
+      <img id="previewImg" style="display:none;max-width:200px;border-radius:8px;margin-top:8px;">
     </div>
 
-    <!-- Video Call UI -->
     <div id="videoContainer" style="display:none;flex-direction:column;align-items:center;margin-top:10px;">
       <video id="localVideo" autoplay muted playsinline style="width:40%;border-radius:10px;"></video>
       <video id="remoteVideo" autoplay playsinline style="width:40%;border-radius:10px;margin-top:10px;"></video>
     </div>
 
-    <!-- extra audio element -->
     <audio id="remoteAudio" autoplay playsinline></audio>
   </div>
 </div>
+
 <script type="module">
 /* -------------------------
-   Firebase & Imports
-------------------------- */
+   FIREBASE + IMPORTS
+   ------------------------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import {
   getAuth,
@@ -113,7 +117,7 @@ const storage = getStorage(app);
 
 /* -------------------------
    UI Elemente
-------------------------- */
+   ------------------------- */
 const authArea = document.getElementById('authArea');
 const userArea = document.getElementById('userArea');
 const userInfo = document.getElementById('userInfo');
@@ -152,15 +156,12 @@ async function requestNotificationPermission(){
 requestNotificationPermission().then(granted => notifyAllowed = granted);
 function showNotification(title, body){
   if(!notifyAllowed) return;
-  try {
-    new Notification(title, { body });
-    messageSound.play().catch(()=>{});
-  } catch(e) { }
+  try { new Notification(title, { body }); messageSound.play().catch(()=>{}); } catch(e) { }
 }
 
 /* -------------------------
    State
-------------------------- */
+   ------------------------- */
 let me = null;
 let selectedPeer = null;
 let unreadCounts = {};
@@ -170,12 +171,12 @@ let callDoc = null;
 
 /* -------------------------
    Auth Funktionen
-------------------------- */
+   ------------------------- */
 window.signup = async () => {
   const email = document.getElementById('email').value;
   const pw = document.getElementById('password').value;
   if(!email || !pw){ alert("E-Mail + Passwort angeben"); return; }
-  try { await createUserWithEmailAndPassword(auth, email, pw); } 
+  try { await createUserWithEmailAndPassword(auth, email, pw); }
   catch(e){ alert(e.message || e); }
 };
 
@@ -183,7 +184,7 @@ window.login = async () => {
   const email = document.getElementById('email').value;
   const pw = document.getElementById('password').value;
   if(!email || !pw){ alert("E-Mail + Passwort angeben"); return; }
-  try { await signInWithEmailAndPassword(auth, email, pw); } 
+  try { await signInWithEmailAndPassword(auth, email, pw); }
   catch(e){ alert(e.message || e); }
 };
 
@@ -195,12 +196,12 @@ window.logout = async () => {
 
 /* -------------------------
    Auth State Listener
-------------------------- */
-onAuthStateChanged(auth, async user => {
+   ------------------------- */
+onAuthStateChanged: undefined;
+onAuthStateChanged = onAuthStateChanged(auth, async user => {
   if(user){
     me = { uid: user.uid, email: user.email, name: (user.email || '').split('@')[0] || 'User' };
-    try { await setDoc(doc(db,'users',me.uid), me, { merge: true }); } 
-    catch(e) { console.error(e); }
+    try { await setDoc(doc(db,'users',me.uid), me, { merge: true }); } catch(e) { console.error(e); }
     authArea.style.display = 'none';
     userArea.style.display = 'block';
     userInfo.textContent = `Angemeldet als ${me.name}`;
@@ -218,7 +219,7 @@ onAuthStateChanged(auth, async user => {
 
 /* -------------------------
    Kontakte & Gruppen
-------------------------- */
+   ------------------------- */
 async function loadContacts(){
   contactsDiv.innerHTML = '';
   try {
@@ -277,24 +278,46 @@ async function loadGroups(){
   } catch(e){ console.error("Fehler beim Laden der Gruppen:", e); }
 }
 
+/* helper: add contact by name (creates a simple user placeholder) */
+async function addContactByName(){
+  const name = document.getElementById('addContactInput').value.trim();
+  if(!name){ alert('Name eingeben'); return; }
+  try{
+    // create a placeholder user (for demo) with generated id
+    const newUser = { uid: 'user_' + Date.now(), name, email: '' };
+    await setDoc(doc(db,'users',newUser.uid), newUser);
+    document.getElementById('addContactInput').value = '';
+    loadContacts();
+  }catch(e){ console.error(e); alert('Kontakt konnte nicht hinzugefügt werden'); }
+}
+
+async function createGroup(){
+  const name = document.getElementById('newGroupName').value.trim();
+  if(!name){ alert('Gruppenname angeben'); return; }
+  try{
+    await addDoc(collection(db,'groups'), { name, members: [me.uid], createdAt: Date.now() });
+    document.getElementById('newGroupName').value = '';
+    loadGroups();
+  }catch(e){ console.error(e); alert('Gruppe konnte nicht erstellt werden'); }
+}
+
 /* -------------------------
    Chat & Nachrichten
-------------------------- */
+   ------------------------- */
+let messagesUnsub = null;
+
 async function loadChat(){
   if(!selectedPeer){ chatTitle.textContent = 'Wähle einen Chat'; callButtons.style.display = 'none'; return; }
   chatTitle.textContent = selectedPeer.name || 'Chat';
   callButtons.style.display = selectedPeer.type === 'user' ? 'flex' : 'none';
   chatBox.innerHTML = '';
 
-  let messagesQuery;
-  try {
-    if(selectedPeer.type === 'user'){
-      messagesQuery = query(collection(db,'messages'), orderBy('timestamp'));
-    } else {
-      messagesQuery = query(collection(db,'messages'), where('to','==', selectedPeer.id), orderBy('timestamp'));
-    }
+  if(messagesUnsub) messagesUnsub();
 
-    onSnapshot(messagesQuery, snap => {
+  try {
+    // listen to all messages ordered by timestamp and filter client-side (simpler than complex Firestore OR queries)
+    const messagesQuery = query(collection(db,'messages'), orderBy('timestamp'));
+    messagesUnsub = onSnapshot(messagesQuery, snap => {
       chatBox.innerHTML = '';
       snap.forEach(docu => {
         const m = docu.data();
@@ -346,10 +369,12 @@ window.sendMessage = async () => {
   } catch(e){ console.error("Fehler beim Senden:", e); alert('Senden fehlgeschlagen'); }
 };
 
-/* Image Upload */
+/* Image Upload (V1.3.2: zuverlässig, mit preview und proper reset) */
 imageInput.addEventListener('change', () => {
   const file = imageInput.files[0];
   if(file){
+    // Basic client-side file size check (limit 8MB)
+    if(file.size > 8 * 1024 * 1024){ alert('Datei zu groß (max. 8MB)'); imageInput.value = ''; previewImg.style.display = 'none'; return; }
     previewImg.src = URL.createObjectURL(file);
     previewImg.style.display = 'block';
   } else previewImg.style.display = 'none';
@@ -360,8 +385,12 @@ window.sendImage = async () => {
   const file = imageInput.files[0];
   if(!file){ alert('Keine Datei gewählt'); return; }
 
+  // disable button until done
+  sendImageBtn.disabled = true;
+  sendImageBtn.textContent = 'Hochladen...';
+
   try {
-    const cleanName = file.name.replace(/[^\w.-]/g,"_");
+    const cleanName = file.name.replace(/[^ -\u007E]/g, "_");
     const path = `chatImages/${me.uid}_${Date.now()}_${cleanName}`;
     const storageRef = ref(storage, path);
     const snapshot = await uploadBytes(storageRef, file);
@@ -375,13 +404,19 @@ window.sendImage = async () => {
       timestamp: Date.now()
     });
 
+    // reset file input + preview
     imageInput.value = '';
+    previewImg.src = '';
     previewImg.style.display = 'none';
   } catch (err) {
     console.error("Upload-Fehler:", err);
     alert("Fehler beim Hochladen des Bildes.");
+  } finally {
+    sendImageBtn.disabled = false;
+    sendImageBtn.textContent = 'Bild senden';
   }
 };
+
 sendImageBtn.addEventListener('click', sendImage);
 
 function updateUnreadBadge(chatId){
@@ -391,9 +426,10 @@ function updateUnreadBadge(chatId){
 
 /* -------------------------
    WebRTC Audio/Video Calls
-------------------------- */
+   ------------------------- */
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
+  // TURN example (ensure your TURN server works or remove)
   { urls: 'turn:thomas-winter-thunder-8011.fly.dev:3478', username: 'webrtcuser', credential: 'supersecurepass' }
 ];
 
@@ -480,7 +516,7 @@ endCallBtn.onclick = () => endCall();
 
 /* -------------------------
    Incoming Calls
-------------------------- */
+   ------------------------- */
 onSnapshot(collection(db,"calls"), snapshot => {
   snapshot.docChanges().forEach(async change => {
     const data = change.doc.data();
@@ -528,14 +564,12 @@ onSnapshot(collection(db,"calls"), snapshot => {
     }
   });
 });
+
 </script>
-
-
-
-
 
 </body>
 </html>
+
 
 
 
