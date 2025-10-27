@@ -2,573 +2,262 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>WebChat Deluxe V1.3.2</title>
-  <link rel="stylesheet" href="styles.css">
-  <!--
-    WebChat Deluxe V1.3.2
-    - HTML + eingebettetes JavaScript (main.js inline) für einfache Nutzung als index.html
-    - Fehlerkorrekturen und stabiler Bildversand via Firebase Storage
-    - Hinweise: styles.css wird verwendet (du hast gesagt, du hast schon eine)
-  -->
-</head>
-<body>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebChat Deluxe V1.3.3</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script type="module">
+    // ==============================
+    // WebChat Deluxe V1.3.3
+    // ==============================
 
-<div class="container">
-  <div class="sidebar">
-    <h2>WebChat Deluxe V1.3.2</h2>
-    <div id="authArea">
-      <input type="email" id="email" placeholder="E-Mail"><br><br>
-      <input type="password" id="password" placeholder="Passwort"><br><br>
-      <button type="button" onclick="signup()">Registrieren</button>
-      <button type="button" style="margin-top:8px;background:#059669" onclick="login()">Anmelden</button>
-    </div>
+    import {
+      initializeApp
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      signOut
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+    import {
+      getFirestore,
+      collection,
+      addDoc,
+      query,
+      where,
+      orderBy,
+      onSnapshot,
+      serverTimestamp,
+      getDocs,
+      doc,
+      setDoc
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+    import {
+      getStorage,
+      ref,
+      uploadBytes,
+      getDownloadURL
+    } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-storage.js";
 
-    <div id="userArea" style="display:none;">
-      <div id="userInfo"></div>
-      <button type="button" style="background:#dc2626;margin-top:8px" onclick="logout()">Abmelden</button>
-      <hr/>
-      <h4>Kontakte</h4>
-      <div id="contacts"></div>
-      <input id="addContactInput" placeholder="Name hinzufügen"><br>
-      <button type="button" style="margin-top:6px" onclick="addContactByName()">Hinzufügen</button>
-      <hr/>
-      <h4>Gruppen</h4>
-      <div id="groups"></div>
-      <input id="newGroupName" placeholder="Gruppenname"><br>
-      <button type="button" style="margin-top:6px" onclick="createGroup()">Erstellen</button>
-    </div>
-  </div>
+    // Dein Firebase-Setup
+    const firebaseConfig = {
+      apiKey: "DEIN_API_KEY",
+      authDomain: "DEIN_AUTH_DOMAIN",
+      projectId: "DEIN_PROJECT_ID",
+      storageBucket: "DEIN_STORAGE_BUCKET",
+      messagingSenderId: "DEIN_MSG_ID",
+      appId: "DEIN_APP_ID",
+    };
 
-  <div class="main">
-    <div id="chatHeader" class="chat-header">
-      <h3 id="chatTitle">Bitte anmelden</h3>
-      <div class="call-buttons" id="callButtons" style="display:none;">
-        <button id="audioCallBtn" title="Sprachanruf starten">📞</button>
-        <button id="videoCallBtn" title="Videoanruf starten">🎥</button>
-        <button id="endCallBtn" title="Auflegen" style="display:none;">❌</button>
-      </div>
-    </div>
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
 
-    <div id="chatBox" class="chat-box"></div>
+    let currentUser = null;
+    let selectedPeer = null;
+    let unsubscribeChat = null;
 
-    <div class="chat-input-area">
-      <div class="chat-input-row">
-        <input id="messageInput" placeholder="Nachricht...">
-        <input type="file" id="imageInput" accept="image/*">
-        <button type="button" onclick="sendMessage()">Senden</button>
-        <button type="button" id="sendImageBtn">Bild senden</button>
-      </div>
-      <img id="previewImg" style="display:none;max-width:200px;border-radius:8px;margin-top:8px;">
-    </div>
+    // ========== Auth ==========
+    async function signup() {
+      const email = document.getElementById("email").value;
+      const pass = document.getElementById("password").value;
+      await createUserWithEmailAndPassword(auth, email, pass);
+    }
 
-    <div id="videoContainer" style="display:none;flex-direction:column;align-items:center;margin-top:10px;">
-      <video id="localVideo" autoplay muted playsinline style="width:40%;border-radius:10px;"></video>
-      <video id="remoteVideo" autoplay playsinline style="width:40%;border-radius:10px;margin-top:10px;"></video>
-    </div>
+    async function login() {
+      const email = document.getElementById("email").value;
+      const pass = document.getElementById("password").value;
+      await signInWithEmailAndPassword(auth, email, pass);
+    }
 
-    <audio id="remoteAudio" autoplay playsinline></audio>
-  </div>
-</div>
+    async function logout() {
+      await signOut(auth);
+    }
 
-<script type="module">
-/* -------------------------
-   FIREBASE + IMPORTS
-   ------------------------- */
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
-import {
-  getAuth,
-  onAuthStateChanged,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut
-} from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
-import {
-  getFirestore,
-  doc,
-  setDoc,
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  updateDoc
-} from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-storage.js";
-
-/* --- FIREBASE CONFIG --- */
-const firebaseConfig = {
-  apiKey: "AIzaSyCFgiS9au7GOzhJ7_ayBcBM3bZrEm5GJOA",
-  authDomain: "webchat-a47cc.firebaseapp.com",
-  databaseURL: "https://webchat-a47cc-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "webchat-a47cc",
-  storageBucket: "webchat-a47cc.appspot.com",
-  messagingSenderId: "318380716143",
-  appId: "1:318380716143:web:da7474bfa392dfeaccdd9a",
-  measurementId: "G-GBFBS5F8GB"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
-
-/* -------------------------
-   UI Elemente
-   ------------------------- */
-const authArea = document.getElementById('authArea');
-const userArea = document.getElementById('userArea');
-const userInfo = document.getElementById('userInfo');
-const contactsDiv = document.getElementById('contacts');
-const groupsDiv = document.getElementById('groups');
-const chatBox = document.getElementById('chatBox');
-const chatTitle = document.getElementById('chatTitle');
-const callButtons = document.getElementById('callButtons');
-const audioCallBtn = document.getElementById('audioCallBtn');
-const videoCallBtn = document.getElementById('videoCallBtn');
-const endCallBtn = document.getElementById('endCallBtn');
-const videoContainer = document.getElementById('videoContainer');
-const localVideo = document.getElementById('localVideo');
-const remoteVideo = document.getElementById('remoteVideo');
-const remoteAudio = document.getElementById('remoteAudio');
-const messageInput = document.getElementById('messageInput');
-const imageInput = document.getElementById('imageInput');
-const sendImageBtn = document.getElementById('sendImageBtn');
-const previewImg = document.getElementById('previewImg');
-
-/* --- Sounds --- */
-const outgoingCallSound = new Audio('https://www.soundjay.com/phone/phone-dial-01.mp3');
-outgoingCallSound.loop = true;
-const incomingCallSound = new Audio('https://www.soundjay.com/phone/phone-ring-01.mp3');
-incomingCallSound.loop = true;
-const messageSound = new Audio('https://www.soundjay.com/button/beep-07.mp3');
-
-/* --- Notifications --- */
-let notifyAllowed = false;
-async function requestNotificationPermission(){
-  if(!("Notification" in window)) return false;
-  if(Notification.permission === "granted") return true;
-  const permission = await Notification.requestPermission();
-  return permission === "granted";
-}
-requestNotificationPermission().then(granted => notifyAllowed = granted);
-function showNotification(title, body){
-  if(!notifyAllowed) return;
-  try { new Notification(title, { body }); messageSound.play().catch(()=>{}); } catch(e) { }
-}
-
-/* -------------------------
-   State
-   ------------------------- */
-let me = null;
-let selectedPeer = null;
-let unreadCounts = {};
-let pc = null;
-let localStream = null;
-let callDoc = null;
-
-/* -------------------------
-   Auth Funktionen
-   ------------------------- */
-window.signup = async () => {
-  const email = document.getElementById('email').value;
-  const pw = document.getElementById('password').value;
-  if(!email || !pw){ alert("E-Mail + Passwort angeben"); return; }
-  try { await createUserWithEmailAndPassword(auth, email, pw); }
-  catch(e){ alert(e.message || e); }
-};
-
-window.login = async () => {
-  const email = document.getElementById('email').value;
-  const pw = document.getElementById('password').value;
-  if(!email || !pw){ alert("E-Mail + Passwort angeben"); return; }
-  try { await signInWithEmailAndPassword(auth, email, pw); }
-  catch(e){ alert(e.message || e); }
-};
-
-window.logout = async () => {
-  try { await signOut(auth); } catch(e){ console.error(e); }
-  selectedPeer = null;
-  chatBox.innerHTML = '';
-};
-
-/* -------------------------
-   Auth State Listener
-   ------------------------- */
-onAuthStateChanged: undefined;
-onAuthStateChanged = onAuthStateChanged(auth, async user => {
-  if(user){
-    me = { uid: user.uid, email: user.email, name: (user.email || '').split('@')[0] || 'User' };
-    try { await setDoc(doc(db,'users',me.uid), me, { merge: true }); } catch(e) { console.error(e); }
-    authArea.style.display = 'none';
-    userArea.style.display = 'block';
-    userInfo.textContent = `Angemeldet als ${me.name}`;
-    loadContacts();
-    loadGroups();
-    chatTitle.textContent = 'Wähle einen Chat';
-  } else {
-    me = null;
-    authArea.style.display = 'block';
-    userArea.style.display = 'none';
-    chatTitle.textContent = 'Bitte anmelden';
-    chatBox.innerHTML = '';
-  }
-});
-
-/* -------------------------
-   Kontakte & Gruppen
-   ------------------------- */
-async function loadContacts(){
-  contactsDiv.innerHTML = '';
-  try {
-    const q = query(collection(db,'users'));
-    const snap = await getDocs(q);
-    snap.forEach(docu => {
-      const u = docu.data();
-      if(u.uid !== me.uid){
-        const div = document.createElement('div');
-        div.className = 'contact-item';
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = u.name || u.email || 'User';
-        nameSpan.style.marginRight = '8px';
-        const countSpan = document.createElement('span');
-        countSpan.id = 'unread-' + u.uid;
-        countSpan.textContent = unreadCounts[u.uid] || '';
-        div.appendChild(nameSpan);
-        div.appendChild(countSpan);
-        div.onclick = () => {
-          selectedPeer = { type: 'user', id: u.uid, name: u.name || u.email };
-          unreadCounts[u.uid] = 0;
-          updateUnreadBadge(u.uid);
-          loadChat();
-        };
-        contactsDiv.appendChild(div);
-      }
+    onAuthStateChanged(auth, (user) => {
+      currentUser = user;
+      document.getElementById("authArea").style.display = user ? "none" : "block";
+      document.getElementById("userArea").style.display = user ? "block" : "none";
+      document.getElementById("chatTitle").innerText = user ? "Wähle einen Chat" : "Bitte anmelden";
+      if (user) loadContacts();
     });
-  } catch(e){ console.error("Fehler beim Laden der Kontakte:", e); }
-}
 
-async function loadGroups(){
-  groupsDiv.innerHTML = '';
-  try {
-    const q = query(collection(db,'groups'), where('members','array-contains', me.uid));
-    const snap = await getDocs(q);
-    snap.forEach(docu => {
-      const g = docu.data();
-      const div = document.createElement('div');
-      div.className = 'group-item';
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = g.name || 'Gruppe';
-      nameSpan.style.marginRight = '8px';
-      const countSpan = document.createElement('span');
-      countSpan.id = 'unread-' + docu.id;
-      countSpan.textContent = unreadCounts[docu.id] || '';
-      div.appendChild(nameSpan);
-      div.appendChild(countSpan);
-      div.onclick = () => {
-        selectedPeer = { type: 'group', id: docu.id, name: g.name };
-        unreadCounts[docu.id] = 0;
-        updateUnreadBadge(docu.id);
-        loadChat();
-      };
-      groupsDiv.appendChild(div);
-    });
-  } catch(e){ console.error("Fehler beim Laden der Gruppen:", e); }
-}
-
-/* helper: add contact by name (creates a simple user placeholder) */
-async function addContactByName(){
-  const name = document.getElementById('addContactInput').value.trim();
-  if(!name){ alert('Name eingeben'); return; }
-  try{
-    // create a placeholder user (for demo) with generated id
-    const newUser = { uid: 'user_' + Date.now(), name, email: '' };
-    await setDoc(doc(db,'users',newUser.uid), newUser);
-    document.getElementById('addContactInput').value = '';
-    loadContacts();
-  }catch(e){ console.error(e); alert('Kontakt konnte nicht hinzugefügt werden'); }
-}
-
-async function createGroup(){
-  const name = document.getElementById('newGroupName').value.trim();
-  if(!name){ alert('Gruppenname angeben'); return; }
-  try{
-    await addDoc(collection(db,'groups'), { name, members: [me.uid], createdAt: Date.now() });
-    document.getElementById('newGroupName').value = '';
-    loadGroups();
-  }catch(e){ console.error(e); alert('Gruppe konnte nicht erstellt werden'); }
-}
-
-/* -------------------------
-   Chat & Nachrichten
-   ------------------------- */
-let messagesUnsub = null;
-
-async function loadChat(){
-  if(!selectedPeer){ chatTitle.textContent = 'Wähle einen Chat'; callButtons.style.display = 'none'; return; }
-  chatTitle.textContent = selectedPeer.name || 'Chat';
-  callButtons.style.display = selectedPeer.type === 'user' ? 'flex' : 'none';
-  chatBox.innerHTML = '';
-
-  if(messagesUnsub) messagesUnsub();
-
-  try {
-    // listen to all messages ordered by timestamp and filter client-side (simpler than complex Firestore OR queries)
-    const messagesQuery = query(collection(db,'messages'), orderBy('timestamp'));
-    messagesUnsub = onSnapshot(messagesQuery, snap => {
-      chatBox.innerHTML = '';
-      snap.forEach(docu => {
-        const m = docu.data();
-        if(selectedPeer.type === 'user'){
-          if((m.from === me.uid && m.to === selectedPeer.id) || (m.from === selectedPeer.id && m.to === me.uid)){
-            renderMessage(m);
-            if(m.from !== me.uid) showNotification(selectedPeer.name, m.type === 'text' ? m.text : "Bildnachricht");
-          } else if(m.from !== me.uid && m.to === me.uid){
-            unreadCounts[m.from] = (unreadCounts[m.from] || 0) + 1;
-            updateUnreadBadge(m.from);
-          }
-        } else {
-          if(m.to === selectedPeer.id){
-            renderMessage(m);
-            if(m.from !== me.uid) showNotification(selectedPeer.name, m.type === 'text' ? m.text : "Bildnachricht");
-          }
+    // ========== Kontakte ==========
+    async function loadContacts() {
+      const contactsDiv = document.getElementById("contacts");
+      contactsDiv.innerHTML = "";
+      const snap = await getDocs(collection(db, "users"));
+      snap.forEach((d) => {
+        if (d.id !== currentUser.uid) {
+          const btn = document.createElement("button");
+          btn.textContent = d.data().email || d.id;
+          btn.onclick = () => openChat(d.id, d.data().email || d.id);
+          contactsDiv.appendChild(btn);
         }
       });
-      chatBox.scrollTop = chatBox.scrollHeight;
-    });
-  } catch(e){ console.error("Fehler beim Laden des Chats:", e); }
-}
-
-function renderMessage(m){
-  if(m.type === 'image'){
-    const img = document.createElement('img');
-    img.src = m.url;
-    img.className = 'chat-img message ' + (m.from === me.uid ? 'sent' : 'received');
-    img.style.maxWidth = '200px';
-    img.style.borderRadius = '8px';
-    img.style.margin = '5px';
-    chatBox.appendChild(img);
-  } else {
-    const div = document.createElement('div');
-    div.textContent = m.text;
-    div.className = 'message ' + (m.from === me.uid ? 'sent' : 'received');
-    div.style.margin = '5px';
-    chatBox.appendChild(div);
-  }
-}
-
-window.sendMessage = async () => {
-  if(!selectedPeer){ alert('Chat auswählen'); return; }
-  const text = messageInput.value.trim();
-  if(!text) return;
-  try {
-    await addDoc(collection(db,'messages'), { from: me.uid, to: selectedPeer.id, type: 'text', text, timestamp: Date.now() });
-    messageInput.value = '';
-  } catch(e){ console.error("Fehler beim Senden:", e); alert('Senden fehlgeschlagen'); }
-};
-
-/* Image Upload (V1.3.2: zuverlässig, mit preview und proper reset) */
-imageInput.addEventListener('change', () => {
-  const file = imageInput.files[0];
-  if(file){
-    // Basic client-side file size check (limit 8MB)
-    if(file.size > 8 * 1024 * 1024){ alert('Datei zu groß (max. 8MB)'); imageInput.value = ''; previewImg.style.display = 'none'; return; }
-    previewImg.src = URL.createObjectURL(file);
-    previewImg.style.display = 'block';
-  } else previewImg.style.display = 'none';
-});
-
-window.sendImage = async () => {
-  if(!selectedPeer){ alert('Chat auswählen'); return; }
-  const file = imageInput.files[0];
-  if(!file){ alert('Keine Datei gewählt'); return; }
-
-  // disable button until done
-  sendImageBtn.disabled = true;
-  sendImageBtn.textContent = 'Hochladen...';
-
-  try {
-    const cleanName = file.name.replace(/[^ -\u007E]/g, "_");
-    const path = `chatImages/${me.uid}_${Date.now()}_${cleanName}`;
-    const storageRef = ref(storage, path);
-    const snapshot = await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(snapshot.ref);
-
-    await addDoc(collection(db,'messages'), {
-      from: me.uid,
-      to: selectedPeer.id,
-      type: 'image',
-      url,
-      timestamp: Date.now()
-    });
-
-    // reset file input + preview
-    imageInput.value = '';
-    previewImg.src = '';
-    previewImg.style.display = 'none';
-  } catch (err) {
-    console.error("Upload-Fehler:", err);
-    alert("Fehler beim Hochladen des Bildes.");
-  } finally {
-    sendImageBtn.disabled = false;
-    sendImageBtn.textContent = 'Bild senden';
-  }
-};
-
-sendImageBtn.addEventListener('click', sendImage);
-
-function updateUnreadBadge(chatId){
-  const span = document.getElementById('unread-' + chatId);
-  if(span) span.textContent = unreadCounts[chatId] || '';
-}
-
-/* -------------------------
-   WebRTC Audio/Video Calls
-   ------------------------- */
-const ICE_SERVERS = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  // TURN example (ensure your TURN server works or remove)
-  { urls: 'turn:thomas-winter-thunder-8011.fly.dev:3478', username: 'webrtcuser', credential: 'supersecurepass' }
-];
-
-async function startCall(video = false){
-  if(!selectedPeer){ alert("Wähle zuerst einen Chat aus!"); return; }
-
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: video });
-    localVideo.srcObject = localStream;
-    videoContainer.style.display = video ? "flex" : "none";
-    outgoingCallSound.play().catch(()=>{});
-  } catch(err) {
-    console.error("Kamera/Mikrofon Fehler:", err);
-    alert("Kamera oder Mikrofon konnte nicht geöffnet werden!");
-    return;
-  }
-
-  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-  pc.ontrack = e => {
-    remoteVideo.srcObject = e.streams[0];
-    remoteAudio.srcObject = e.streams[0];
-  };
-
-  const callRef = doc(collection(db,"calls"));
-  callDoc = callRef;
-  const offerCandidates = collection(callRef,"offerCandidates");
-  const answerCandidates = collection(callRef,"answerCandidates");
-
-  pc.onicecandidate = e => { if(e.candidate) addDoc(offerCandidates, e.candidate.toJSON()); };
-
-  try {
-    const offerDesc = await pc.createOffer();
-    await pc.setLocalDescription(offerDesc);
-    await setDoc(callRef, { offer: { sdp: offerDesc.sdp, type: offerDesc.type }, from: me.uid, to: selectedPeer.id, active: true, video });
-  } catch(e) { console.error("Fehler beim Erstellen des Offers:", e); }
-
-  onSnapshot(callRef, async snap => {
-    const data = snap.data();
-    if(!pc.currentRemoteDescription && data?.answer){
-      try { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); }
-      catch(e){ console.error("RemoteDescription Fehler:", e); }
-      outgoingCallSound.pause(); outgoingCallSound.currentTime = 0;
     }
-  });
 
-  onSnapshot(answerCandidates, snap => {
-    snap.docChanges().forEach(change => {
-      if(change.type === "added") {
-        try { pc.addIceCandidate(new RTCIceCandidate(change.doc.data())); }
-        catch(e) { console.error("ICE-Kandidaten Fehler:", e); }
+    async function addContactByName() {
+      const name = document.getElementById("addContactInput").value.trim();
+      if (!name) return;
+      await setDoc(doc(db, "users", currentUser.uid), { email: currentUser.email }, { merge: true });
+      document.getElementById("addContactInput").value = "";
+      loadContacts();
+    }
+
+    // ========== Chat ==========
+    function openChat(peerId, peerName) {
+      selectedPeer = { id: peerId, name: peerName };
+      document.getElementById("chatTitle").innerText = peerName;
+      document.getElementById("chatBox").innerHTML = "";
+      if (unsubscribeChat) unsubscribeChat();
+      loadChat();
+    }
+
+    function loadChat() {
+      if (!selectedPeer || !currentUser) return;
+      const chatBox = document.getElementById("chatBox");
+      chatBox.innerHTML = "<p style='color:gray'>Lade Nachrichten...</p>";
+
+      const q = query(
+        collection(db, "messages"),
+        where("participants", "array-contains", currentUser.uid),
+        orderBy("timestamp", "asc")
+      );
+
+      unsubscribeChat = onSnapshot(q, (snapshot) => {
+        chatBox.innerHTML = "";
+        snapshot.forEach((docu) => {
+          const msg = docu.data();
+          if (
+            msg.participants.includes(currentUser.uid) &&
+            msg.participants.includes(selectedPeer.id)
+          ) {
+            const div = document.createElement("div");
+            div.className = msg.from === currentUser.uid ? "message me" : "message other";
+            if (msg.text) div.textContent = msg.text;
+            if (msg.imageUrl) {
+              const img = document.createElement("img");
+              img.src = msg.imageUrl;
+              img.style.maxWidth = "200px";
+              img.style.borderRadius = "10px";
+              div.appendChild(img);
+            }
+            chatBox.appendChild(div);
+          }
+        });
+        chatBox.scrollTop = chatBox.scrollHeight;
+      });
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById("messageInput");
+      const text = input.value.trim();
+      if (!text || !selectedPeer || !currentUser) return;
+      try {
+        await addDoc(collection(db, "messages"), {
+          from: currentUser.uid,
+          to: selectedPeer.id,
+          participants: [currentUser.uid, selectedPeer.id],
+          text: text,
+          timestamp: serverTimestamp(),
+        });
+        input.value = "";
+      } catch (err) {
+        alert("Fehler beim Senden: " + err.message);
       }
-    });
-  });
+    }
 
-  audioCallBtn.style.display = "none";
-  videoCallBtn.style.display = "none";
-  endCallBtn.style.display = "inline-block";
-}
+    // ========== Bild senden ==========
+    async function sendImage() {
+      const fileInput = document.getElementById("imageInput");
+      const file = fileInput.files[0];
+      if (!file || !selectedPeer || !currentUser) return;
 
-async function endCall(){
-  if(pc) pc.close();
-  if(localStream) localStream.getTracks().forEach(t => t.stop());
-
-  pc = null;
-  localStream = null;
-  videoContainer.style.display = "none";
-  audioCallBtn.style.display = "inline-block";
-  videoCallBtn.style.display = "inline-block";
-  endCallBtn.style.display = "none";
-  outgoingCallSound.pause(); outgoingCallSound.currentTime = 0;
-  incomingCallSound.pause(); incomingCallSound.currentTime = 0;
-
-  if(callDoc){
-    try { await updateDoc(callDoc, { active: false }); } catch(e){ }
-    callDoc = null;
-  }
-}
-
-audioCallBtn.onclick = () => startCall(false);
-videoCallBtn.onclick = () => startCall(true);
-endCallBtn.onclick = () => endCall();
-
-/* -------------------------
-   Incoming Calls
-   ------------------------- */
-onSnapshot(collection(db,"calls"), snapshot => {
-  snapshot.docChanges().forEach(async change => {
-    const data = change.doc.data();
-    const docRef = change.doc.ref;
-    if(change.type === "added" && data.to === me?.uid && !pc && data.active){
-      incomingCallSound.play().catch(()=>{});
-      const accept = confirm(`${data.video ? "Video" : "Audio"}-Anruf von ${data.from}. Annehmen?`);
-      if(!accept){
-        incomingCallSound.pause(); incomingCallSound.currentTime = 0;
-        try { await updateDoc(docRef, { active: false }); } catch(e){ }
+      if (file.size > 8 * 1024 * 1024) {
+        alert("Bild zu groß (max. 8 MB)");
         return;
       }
 
-      incomingCallSound.pause(); incomingCallSound.currentTime = 0;
+      const status = document.getElementById("uploadStatus");
+      status.textContent = "📤 Lade hoch...";
 
-      pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
+      const imgRef = ref(storage, `images/${Date.now()}_${file.name}`);
       try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: data.video });
-        localVideo.srcObject = localStream;
-      } catch(err){
-        console.error("Kamera/Mikrofon Fehler:", err);
-        alert("Kamera oder Mikrofon konnte nicht geöffnet werden!");
-        return;
+        await uploadBytes(imgRef, file);
+        const url = await getDownloadURL(imgRef);
+
+        await addDoc(collection(db, "messages"), {
+          from: currentUser.uid,
+          to: selectedPeer.id,
+          participants: [currentUser.uid, selectedPeer.id],
+          imageUrl: url,
+          timestamp: serverTimestamp(),
+        });
+
+        status.textContent = "✅ Hochgeladen";
+        fileInput.value = "";
+        setTimeout(() => (status.textContent = ""), 2000);
+      } catch (err) {
+        status.textContent = "❌ Fehler: " + err.message;
       }
-
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-      pc.ontrack = e => { remoteVideo.srcObject = e.streams[0]; remoteAudio.srcObject = e.streams[0]; };
-      videoContainer.style.display = data.video ? "flex" : "none";
-
-      const answerCandidates = collection(docRef,"answerCandidates");
-      pc.onicecandidate = e => { if(e.candidate) addDoc(answerCandidates,e.candidate.toJSON()); };
-
-      try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answerDesc = await pc.createAnswer();
-        await pc.setLocalDescription(answerDesc);
-        await updateDoc(docRef, { answer: { type: answerDesc.type, sdp: answerDesc.sdp }, active: true });
-      } catch(e){ console.error("Fehler beim Beantworten des Calls:", e); }
-
-      callDoc = docRef;
-      audioCallBtn.style.display = "none";
-      videoCallBtn.style.display = "none";
-      endCallBtn.style.display = "inline-block";
     }
-  });
-});
 
-</script>
+    window.signup = signup;
+    window.login = login;
+    window.logout = logout;
+    window.addContactByName = addContactByName;
+    window.openChat = openChat;
+    window.sendMessage = sendMessage;
+    window.sendImage = sendImage;
+  </script>
+</head>
 
+<body>
+  <div class="container">
+    <aside class="sidebar">
+      <h2>WebChat Deluxe V1.3.3</h2>
+
+      <div id="authArea">
+        <input id="email" type="email" placeholder="E-Mail"><br><br>
+        <input id="password" type="password" placeholder="Passwort"><br><br>
+        <button onclick="signup()">Registrieren</button>
+        <button style="margin-top:8px;background:#059669" onclick="login()">Anmelden</button>
+      </div>
+
+      <div id="userArea" style="display:none;">
+        <div id="userInfo"></div>
+        <button style="background:#dc2626;margin-top:8px" onclick="logout()">Abmelden</button>
+        <hr>
+        <h4>Kontakte</h4>
+        <div id="contacts"></div>
+        <input id="addContactInput" placeholder="Name hinzufügen"><br>
+        <button style="margin-top:6px" onclick="addContactByName()">Hinzufügen</button>
+        <hr>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="chat-header">
+        <h3 id="chatTitle">Bitte anmelden</h3>
+      </header>
+
+      <section id="chatBox" class="chat-box"></section>
+
+      <footer class="chat-input">
+        <input id="messageInput" placeholder="Nachricht schreiben..." />
+        <button onclick="sendMessage()">Senden</button>
+        <input type="file" id="imageInput" accept="image/*">
+        <button onclick="sendImage()">📷</button>
+        <span id="uploadStatus" style="margin-left:8px;color:gray;font-size:0.9em;"></span>
+      </footer>
+    </main>
+  </div>
 </body>
 </html>
+
 
 
 
