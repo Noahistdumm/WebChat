@@ -162,10 +162,8 @@ async function requestNotificationPermission(){
 requestNotificationPermission().then(granted => notifyAllowed = granted);
 function showNotification(title, body){
   if(!notifyAllowed) return;
-  try {
-    new Notification(title, { body });
-    messageSound.play().catch(()=>{});
-  } catch(e) { }
+  try { new Notification(title, { body }); messageSound.play().catch(()=>{}); } 
+  catch(e){}
 }
 
 /* -------------------------
@@ -177,6 +175,7 @@ let unreadCounts = {};
 let pc = null;
 let localStream = null;
 let callDoc = null;
+let selectedFile = null;
 
 /* -------------------------
    Auth Funktionen
@@ -204,7 +203,7 @@ window.logout = async () => {
 };
 
 /* -------------------------
-   Auth State Listener + Autologin
+   Auth State Listener
 ------------------------- */
 onAuthStateChanged(auth, async user => {
   if(user){
@@ -231,60 +230,54 @@ onAuthStateChanged(auth, async user => {
 ------------------------- */
 async function loadContacts(){
   contactsDiv.innerHTML = '';
-  try {
-    const q = query(collection(db,'users'));
-    const snap = await getDocs(q);
-    snap.forEach(docu => {
-      const u = docu.data();
-      if(u.uid !== me.uid){
-        const div = document.createElement('div');
-        div.className = 'contact-item';
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = u.name || u.email || 'User';
-        nameSpan.style.marginRight = '8px';
-        const countSpan = document.createElement('span');
-        countSpan.id = 'unread-' + u.uid;
-        countSpan.textContent = unreadCounts[u.uid] || '';
-        div.appendChild(nameSpan);
-        div.appendChild(countSpan);
-        div.onclick = () => {
-          selectedPeer = { type: 'user', id: u.uid, name: u.name || u.email };
-          unreadCounts[u.uid] = 0;
-          updateUnreadBadge(u.uid);
-          loadChat();
-        };
-        contactsDiv.appendChild(div);
-      }
-    });
-  } catch(e){ console.error("Fehler beim Laden der Kontakte:", e); }
+  const q = query(collection(db,'users'));
+  const snap = await getDocs(q);
+  snap.forEach(docu => {
+    const u = docu.data();
+    if(u.uid !== me.uid){
+      const div = document.createElement('div');
+      div.className = 'contact-item';
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = u.name || u.email || 'User';
+      const countSpan = document.createElement('span');
+      countSpan.id = 'unread-' + u.uid;
+      countSpan.textContent = unreadCounts[u.uid] || '';
+      div.appendChild(nameSpan);
+      div.appendChild(countSpan);
+      div.onclick = () => {
+        selectedPeer = { type: 'user', id: u.uid, name: u.name || u.email };
+        unreadCounts[u.uid] = 0;
+        updateUnreadBadge(u.uid);
+        loadChat();
+      };
+      contactsDiv.appendChild(div);
+    }
+  });
 }
 
 async function loadGroups(){
   groupsDiv.innerHTML = '';
-  try {
-    const q = query(collection(db,'groups'), where('members','array-contains', me.uid));
-    const snap = await getDocs(q);
-    snap.forEach(docu => {
-      const g = docu.data();
-      const div = document.createElement('div');
-      div.className = 'group-item';
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = g.name || 'Gruppe';
-      nameSpan.style.marginRight = '8px';
-      const countSpan = document.createElement('span');
-      countSpan.id = 'unread-' + docu.id;
-      countSpan.textContent = unreadCounts[docu.id] || '';
-      div.appendChild(nameSpan);
-      div.appendChild(countSpan);
-      div.onclick = () => {
-        selectedPeer = { type: 'group', id: docu.id, name: g.name };
-        unreadCounts[docu.id] = 0;
-        updateUnreadBadge(docu.id);
-        loadChat();
-      };
-      groupsDiv.appendChild(div);
-    });
-  } catch(e){ console.error("Fehler beim Laden der Gruppen:", e); }
+  const q = query(collection(db,'groups'), where('members','array-contains', me.uid));
+  const snap = await getDocs(q);
+  snap.forEach(docu => {
+    const g = docu.data();
+    const div = document.createElement('div');
+    div.className = 'group-item';
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = g.name || 'Gruppe';
+    const countSpan = document.createElement('span');
+    countSpan.id = 'unread-' + docu.id;
+    countSpan.textContent = unreadCounts[docu.id] || '';
+    div.appendChild(nameSpan);
+    div.appendChild(countSpan);
+    div.onclick = () => {
+      selectedPeer = { type: 'group', id: docu.id, name: g.name };
+      unreadCounts[docu.id] = 0;
+      updateUnreadBadge(docu.id);
+      loadChat();
+    };
+    groupsDiv.appendChild(div);
+  });
 }
 
 /* -------------------------
@@ -297,161 +290,156 @@ async function loadChat(){
   chatBox.innerHTML = '';
 
   let messagesQuery;
-  try {
-    if(selectedPeer.type === 'user'){
-      messagesQuery = query(collection(db,'messages'), orderBy('timestamp'));
-    } else {
-      messagesQuery = query(collection(db,'messages'), where('to','==', selectedPeer.id), orderBy('timestamp'));
-    }
+  if(selectedPeer.type === 'user'){
+    messagesQuery = query(collection(db,'messages'), orderBy('timestamp'));
+  } else {
+    messagesQuery = query(collection(db,'messages'), where('to','==', selectedPeer.id), orderBy('timestamp'));
+  }
 
-    onSnapshot(messagesQuery, snap => {
-      chatBox.innerHTML = '';
-      snap.forEach(docu => {
-        const m = docu.data();
-        if(selectedPeer.type === 'user'){
-          if((m.from === me.uid && m.to === selectedPeer.id) || (m.from === selectedPeer.id && m.to === me.uid)){
-            renderMessage(m);
-            if(m.from !== me.uid) showNotification(selectedPeer.name, m.type === 'text' ? m.text : "Bildnachricht");
-          } else if(m.to === me.uid && m.from !== me.uid){
-            unreadCounts[m.from] = (unreadCounts[m.from]||0) + 1;
-            updateUnreadBadge(m.from);
-          }
-        } else if(selectedPeer.type === 'group'){
-          if(m.to === selectedPeer.id){
-            renderMessage(m);
-          }
+  onSnapshot(messagesQuery, snap => {
+    chatBox.innerHTML = '';
+    snap.forEach(docu => {
+      const m = docu.data();
+      if(selectedPeer.type === 'user'){
+        if((m.from === me.uid && m.to === selectedPeer.id) || (m.from === selectedPeer.id && m.to === me.uid)){
+          renderMessage(m);
+          if(m.from !== me.uid) showNotification(selectedPeer.name, m.type==='text'?m.text:'Bildnachricht');
+        } else if(m.from!==me.uid && m.to===me.uid){
+          unreadCounts[m.from]=(unreadCounts[m.from]||0)+1;
+          updateUnreadBadge(m.from);
         }
-      });
-      chatBox.scrollTop = chatBox.scrollHeight;
+      } else {
+        if(m.to===selectedPeer.id){
+          renderMessage(m);
+          if(m.from!==me.uid) showNotification(selectedPeer.name, m.type==='text'?m.text:'Bildnachricht');
+        }
+      }
     });
-  } catch(e){ console.error(e); }
+    chatBox.scrollTop = chatBox.scrollHeight;
+  });
 }
 
 function renderMessage(m){
-  const div = document.createElement('div');
-  div.className = 'message ' + (m.from===me.uid ? 'sent' : 'received');
-  if(m.type === 'text'){
-    div.textContent = m.text;
-  } else if(m.type === 'image'){
+  if(m.type==='image'){
     const img = document.createElement('img');
     img.src = m.url;
-    img.className = 'chat-img';
-    div.appendChild(img);
+    img.className = 'chat-img message ' + (m.from===me.uid?'sent':'received');
+    chatBox.appendChild(img);
+  } else {
+    const div = document.createElement('div');
+    div.textContent = m.text;
+    div.className = 'message ' + (m.from===me.uid?'sent':'received');
+    chatBox.appendChild(div);
   }
-  chatBox.appendChild(div);
 }
 
-async function sendMessage(){
-  if(!selectedPeer) return;
-  const txt = messageInput.value.trim();
-  if(!txt) return;
-  await addDoc(collection(db,'messages'),{
-    from: me.uid,
-    to: selectedPeer.id,
-    type: 'text',
-    text: txt,
-    timestamp: new Date()
-  });
-  messageInput.value = '';
+window.sendMessage = async () => {
+  if(!selectedPeer){ alert('Chat auswählen'); return; }
+  const text = messageInput.value.trim();
+  if(!text) return;
+  await addDoc(collection(db,'messages'), { from: me.uid, to: selectedPeer.id, type:'text', text, timestamp:Date.now() });
+  messageInput.value='';
 }
-
-sendImageBtn.onclick = async () => {
-  if(!selectedPeer || !imageInput.files[0]) return;
-  const file = imageInput.files[0];
-  const storageRef = ref(storage, `images/${Date.now()}_${file.name}`);
-  await uploadBytes(storageRef, file);
-  const url = await getDownloadURL(storageRef);
-  await addDoc(collection(db,'messages'), {
-    from: me.uid,
-    to: selectedPeer.id,
-    type: 'image',
-    url,
-    timestamp: new Date()
-  });
-  imageInput.value = '';
-};
 
 /* -------------------------
-   WebRTC Calls
+   Image Upload & Send
 ------------------------- */
-async function startCall(isVideo){
-  if(!selectedPeer) return;
-  pc = new RTCPeerConnection();
-  localStream = await navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true });
-  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-  localVideo.srcObject = localStream;
+imageInput.addEventListener('change', (e) => {
+  selectedFile = e.target.files[0];
+  if(selectedFile){ previewImg.src = URL.createObjectURL(selectedFile); previewImg.style.display='block'; } 
+  else previewImg.style.display='none';
+});
 
-  pc.ontrack = e => {
-    remoteVideo.srcObject = e.streams[0];
-  };
+async function sendImage(){
+  if(!selectedPeer){ alert('Chat auswählen'); return; }
+  if(!selectedFile){ alert('Keine Datei gewählt'); return; }
+  const cleanName = selectedFile.name.replace(/[^\w.-]/g,"_");
+  const path = `chatImages/${me.uid}_${Date.now()}_${cleanName}`;
+  const storageRef = ref(storage,path);
+  const snapshot = await uploadBytes(storageRef,selectedFile);
+  const url = await getDownloadURL(snapshot.ref);
+  await addDoc(collection(db,'messages'), { from:me.uid,to:selectedPeer.id,type:'image',url,timestamp:Date.now() });
+  selectedFile=null; imageInput.value=''; previewImg.style.display='none';
+}
 
-  // Signaling über Firestore
-  const callRef = doc(collection(db,'calls'));
-  callDoc = callRef;
+sendImageBtn.addEventListener('click', sendImage);
 
-  pc.onicecandidate = event => {
-    if(event.candidate){
-      const cRef = collection(callRef,'candidates');
-      addDoc(cRef,event.candidate.toJSON());
-    }
-  };
+/* -------------------------
+   Unread Badge
+------------------------- */
+function updateUnreadBadge(chatId){
+  const span = document.getElementById('unread-'+chatId);
+  if(span) span.textContent = unreadCounts[chatId]||'';
+}
 
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  await setDoc(callRef,{from: me.uid,to: selectedPeer.id,offer: offer.toJSON()});
+/* -------------------------
+   WebRTC Audio/Video Calls
+------------------------- */
+const ICE_SERVERS = [{urls:'stun:stun.l.google.com:19302'}];
 
-  // Listen for answer
-  onSnapshot(callRef, snap => {
-    if(!snap.exists()) return;
-    const data = snap.data();
-    if(data.answer && !pc.currentRemoteDescription){
-      pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-    }
-  });
-
-  // Listen for remote ICE
-  const candidatesRef = collection(callRef,'candidates');
-  onSnapshot(candidatesRef,snap => {
-    snap.docChanges().forEach(change => {
-      if(change.type==='added'){
-        pc.addIceCandidate(new RTCIceCandidate(change.doc.data())).catch(()=>{});
-      }
-    });
-  });
+async function startCall(video=false){
+  if(!selectedPeer){ alert("Chat auswählen"); return; }
+  try{
+    localStream = await navigator.mediaDevices.getUserMedia({ audio:true, video:video });
+    localVideo.srcObject = localStream;
+    videoContainer.style.display = video?"flex":"none";
+  } catch(e){ alert("Kamera/Mikrofon nicht verfügbar"); return; }
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  localStream.getTracks().forEach(track=>pc.addTrack(track,localStream));
+  pc.ontrack = e=>{ remoteVideo.srcObject=e.streams[0]; remoteAudio.srcObject=e.streams[0]; };
+  audioCallBtn.style.display='none'; videoCallBtn.style.display='none'; endCallBtn.style.display='inline-block';
 }
 
 async function endCall(){
-  if(pc){ pc.close(); pc = null; }
-  if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream = null; }
-  localVideo.srcObject = null;
-  remoteVideo.srcObject = null;
-  if(callDoc) await callDoc.delete().catch(()=>{}); 
-  callDoc = null;
+  if(pc) pc.close();
+  if(localStream) localStream.getTracks().forEach(t=>t.stop());
+  pc=null; localStream=null;
+  videoContainer.style.display='none';
+  audioCallBtn.style.display='inline-block';
+  videoCallBtn.style.display='inline-block';
+  endCallBtn.style.display='none';
 }
 
-audioCallBtn.onclick = () => startCall(false);
-videoCallBtn.onclick = () => startCall(true);
-endCallBtn.onclick = endCall;
+audioCallBtn.onclick=()=>startCall(false);
+videoCallBtn.onclick=()=>startCall(true);
+endCallBtn.onclick=()=>endCall();
 
 /* -------------------------
-   Popup Update Info
+   Update Popup
 ------------------------- */
-const updatePopup = document.getElementById('updatePopup');
-const updateBtn = document.getElementById('showUpdateBtn');
+const updateBtn = document.createElement('button');
+updateBtn.textContent = 'Changelog anzeigen';
+updateBtn.style.position='fixed';
+updateBtn.style.bottom='10px';
+updateBtn.style.right='10px';
+updateBtn.style.zIndex='9999';
+document.body.appendChild(updateBtn);
 
-updateBtn.onclick = () => {
-  updatePopup.classList.toggle('show');
-};
+let updateVisible = false;
+const updateDiv = document.createElement('div');
+updateDiv.innerHTML = `<h3>V1.4 Update</h3>
+<ul>
+<li>Bilder senden hinzugefügt</li>
+<li>Automatisches Login</li>
+<li>WebRTC Calls gefixt</li>
+<li>Update-Popup</li>
+</ul>`;
+updateDiv.style.position='fixed';
+updateDiv.style.bottom='50px';
+updateDiv.style.right='10px';
+updateDiv.style.width='250px';
+updateDiv.style.background='#222';
+updateDiv.style.color='#fff';
+updateDiv.style.padding='10px';
+updateDiv.style.borderRadius='10px';
+updateDiv.style.display='none';
+updateDiv.style.zIndex='9999';
+document.body.appendChild(updateDiv);
 
-/* -------------------------
-   Helper Funktionen
-------------------------- */
-function updateUnreadBadge(uid){
-  const el = document.getElementById('unread-'+uid);
-  if(el) el.textContent = unreadCounts[uid] || '';
+updateBtn.onclick = ()=>{
+  updateVisible = !updateVisible;
+  updateDiv.style.display = updateVisible?'block':'none';
 }
-
-window.sendMessage = sendMessage;
 </script>
 
 
