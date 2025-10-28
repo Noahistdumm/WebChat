@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>WebChat Deluxe V1.4</title>
+<title>WebChat Deluxe V1.4.1</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
 <div class="container">
   <div class="sidebar">
-    <h2>WebChat Deluxe V1.4</h2>
+    <h2>WebChat Deluxe V1.4.1</h2>
     <div id="authArea">
       <input type="email" id="email" placeholder="E-Mail"><br><br>
       <input type="password" id="password" placeholder="Passwort"><br><br>
@@ -440,6 +440,156 @@ updateBtn.onclick = ()=>{
   updateVisible = !updateVisible;
   updateDiv.style.display = updateVisible?'block':'none';
 }
+  /* -------------------------
+   CALL SIGNALING & POPUP
+------------------------- */
+
+const callsCol = collection(db, "calls");
+
+// --- Pop-up Element erstellen ---
+const incomingPopup = document.createElement("div");
+incomingPopup.id = "incomingPopup";
+incomingPopup.innerHTML = `
+  <div class="popup-content">
+    <h3 id="popupTitle">📞 Eingehender Anruf</h3>
+    <p id="popupCaller"></p>
+    <div class="popup-buttons">
+      <button id="acceptCallBtn" class="accept-btn">Annehmen</button>
+      <button id="declineCallBtn" class="decline-btn">Ablehnen</button>
+    </div>
+  </div>
+`;
+document.body.appendChild(incomingPopup);
+incomingPopup.style.display = "none";
+
+// --- CSS wird über deine vorhandene Datei gestylt, z. B.:
+incomingPopup.style.position = "fixed";
+incomingPopup.style.top = "50%";
+incomingPopup.style.left = "50%";
+incomingPopup.style.transform = "translate(-50%, -50%)";
+incomingPopup.style.background = "#1f2937";
+incomingPopup.style.padding = "20px";
+incomingPopup.style.borderRadius = "15px";
+incomingPopup.style.color = "white";
+incomingPopup.style.textAlign = "center";
+incomingPopup.style.boxShadow = "0 0 25px rgba(0,0,0,0.6)";
+incomingPopup.style.zIndex = "99999";
+
+// Buttons extra stylisch
+const popupButtons = incomingPopup.querySelectorAll("button");
+popupButtons.forEach(btn => {
+  btn.style.margin = "8px";
+  btn.style.padding = "8px 20px";
+  btn.style.border = "none";
+  btn.style.borderRadius = "8px";
+  btn.style.cursor = "pointer";
+});
+document.getElementById("acceptCallBtn").style.background = "#16a34a";
+document.getElementById("declineCallBtn").style.background = "#dc2626";
+
+// --- Helper: neuen Call erstellen ---
+async function createCallDocument(video = false) {
+  const callDoc = doc(callsCol);
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await setDoc(callDoc, {
+    from: me.uid,
+    to: selectedPeer.id,
+    type: video ? "video" : "audio",
+    offer: offer,
+    active: true,
+    created: Date.now()
+  });
+  return callDoc.id;
+}
+
+// --- Bei Start eines Calls auch Firestore-Dokument anlegen ---
+async function startCall(video = false) {
+  if (!selectedPeer) return alert("Chat auswählen!");
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: video,
+    });
+    localVideo.srcObject = localStream;
+    videoContainer.style.display = video ? "flex" : "none";
+  } catch (e) {
+    alert("Kamera/Mikrofon nicht verfügbar");
+    return;
+  }
+
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+  pc.ontrack = (e) => {
+    remoteVideo.srcObject = e.streams[0];
+    remoteAudio.srcObject = e.streams[0];
+  };
+
+  // Firestore CallDoc
+  const callId = await createCallDocument(video);
+  console.log("Call started, ID:", callId);
+
+  audioCallBtn.style.display = "none";
+  videoCallBtn.style.display = "none";
+  endCallBtn.style.display = "inline-block";
+}
+
+// --- Eingehende Calls überwachen ---
+onSnapshot(query(callsCol, where("to", "==", me?.uid || "")), async (snap) => {
+  snap.docChanges().forEach(async (change) => {
+    if (change.type === "added") {
+      const data = change.doc.data();
+      if (!data.active) return;
+      const callerSnap = await getDoc(doc(db, "users", data.from));
+      const callerName = callerSnap.exists() ? callerSnap.data().name : "Unbekannt";
+
+      incomingCallSound.play();
+      document.getElementById("popupCaller").textContent =
+        `${callerName} ruft dich an (${data.type === "video" ? "🎥 Video" : "🎧 Audio"})`;
+      incomingPopup.style.display = "block";
+
+      document.getElementById("acceptCallBtn").onclick = async () => {
+        incomingPopup.style.display = "none";
+        incomingCallSound.pause();
+        await answerCall(change.doc.id, data);
+      };
+      document.getElementById("declineCallBtn").onclick = async () => {
+        incomingPopup.style.display = "none";
+        incomingCallSound.pause();
+        await updateDoc(change.doc.ref, { active: false });
+      };
+    }
+  });
+});
+
+// --- Call annehmen ---
+async function answerCall(callId, callData) {
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  localStream = await navigator.mediaDevices.getUserMedia({
+    audio: true,
+    video: callData.type === "video",
+  });
+  localVideo.srcObject = localStream;
+  videoContainer.style.display = callData.type === "video" ? "flex" : "none";
+  localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+  pc.ontrack = (e) => {
+    remoteVideo.srcObject = e.streams[0];
+    remoteAudio.srcObject = e.streams[0];
+  };
+
+  await pc.setRemoteDescription(callData.offer);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  await updateDoc(doc(db, "calls", callId), {
+    answer: answer,
+    active: true,
+  });
+
+  audioCallBtn.style.display = "none";
+  videoCallBtn.style.display = "none";
+  endCallBtn.style.display = "inline-block";
+}
+
 </script>
 
 
