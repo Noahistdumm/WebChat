@@ -1,0 +1,118 @@
+/* extra.css - für Discord-style incoming popup + kleine UI-tweaks */
+
+/* backdrop + centered card */
+.incoming-popup {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100000;
+  pointer-events: none;
+}
+.incoming-popup .incoming-popup-backdrop {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(6px) saturate(120%);
+  background: rgba(3,7,18,0.5);
+  transition: opacity .25s ease;
+}
+.incoming-popup .incoming-popup-card {
+  position: relative;
+  width: 420px;
+  max-width: calc(100% - 40px);
+  background: linear-gradient(180deg, rgba(28,30,36,0.98), rgba(16,18,22,0.98));
+  border: 1px solid rgba(255,255,255,0.04);
+  box-shadow: 0 10px 40px rgba(2,6,23,0.7);
+  border-radius: 14px;
+  padding: 16px;
+  color: #e6eef8;
+  pointer-events: auto;
+  transform: translateY(-8px) scale(.98);
+  opacity: 0;
+  transition: transform .22s cubic-bezier(.2,.9,.3,1), opacity .22s ease;
+  overflow: hidden;
+}
+.incoming-popup.show .incoming-popup-card,
+.incoming-popup[style*="display: block;"] .incoming-popup-card {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+/* header */
+.incoming-popup-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.caller-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background: linear-gradient(135deg,#2dd4bf,#60a5fa);
+  font-size: 26px;
+  box-shadow: 0 6px 18px rgba(96,165,250,0.12);
+}
+.popup-caller {
+  margin:0;
+  color: #E6EEF8;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* actions */
+.incoming-popup-actions {
+  display:flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 14px;
+}
+.btn {
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: .2px;
+  transition: transform .12s ease, box-shadow .12s ease;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.5);
+}
+.btn:active { transform: translateY(2px); }
+.btn.accept { background: linear-gradient(90deg,#10b981,#059669); color: #fff; }
+.btn.decline { background: linear-gradient(90deg,#ef4444,#dc2626); color: #fff; }
+
+/* floating update btn */
+.floating-update-btn {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  z-index: 99999;
+  background: #111827;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(2,6,23,0.6);
+}
+.floating-update-panel {
+  position: fixed;
+  bottom: 60px;
+  right: 12px;
+  z-index: 99999;
+  background: #0b1220;
+  color: #fff;
+  padding: 12px;
+  border-radius: 10px;
+  display: none;
+  width: 260px;
+  box-shadow: 0 10px 40px rgba(2,6,23,0.6);
+}
+
+/* small desktop niceties */
+@media (max-width: 700px){
+  .incoming-popup .incoming-popup-card { width: calc(100% - 30px); }
+}
