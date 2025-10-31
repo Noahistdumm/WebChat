@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>WebChat Deluxe V1.4.2</title>
+<title>WebChat Deluxe V1.4.2 (Fixed)</title>
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="extra.css">
 </head>
@@ -19,7 +19,7 @@
       <button type="button" style="margin-top:8px;background:#059669" onclick="login()">Anmelden</button>
     </div>
 <button id="showUpdateBtn">Updates anzeigen</button>
-<div id="updatePopup">
+<div id="updatePopup" style="display:none;">
   <h4>Neues in V1.4.2</h4>
   <ul>
     <li>Call-Signalisierung via Firestore</li>
@@ -169,6 +169,8 @@ const incomingPopup = document.getElementById('incomingPopup');
 const popupCallerTxt = document.getElementById('popupCaller');
 const acceptCallBtn = document.getElementById('acceptCallBtn');
 const declineCallBtn = document.getElementById('declineCallBtn');
+const showUpdateBtn = document.getElementById('showUpdateBtn');
+const updatePopup = document.getElementById('updatePopup');
 
 /* --- Sounds --- */
 const outgoingCallSound = new Audio('https://www.soundjay.com/phone/phone-dial-01.mp3');
@@ -245,6 +247,8 @@ onAuthStateChanged(auth, async user => {
     loadContacts();
     loadGroups();
     chatTitle.textContent = 'Wähle einen Chat';
+    // setup incoming call watcher now that me exists
+    setupIncomingWatcher();
   } else {
     me = null;
     authArea.style.display = 'block';
@@ -312,20 +316,25 @@ async function loadGroups(){
 /* -------------------------
    Chat & Nachrichten
 ------------------------- */
+let messagesUnsub = null;
 async function loadChat(){
   if(!selectedPeer){ chatTitle.textContent = 'Wähle einen Chat'; callButtons.style.display = 'none'; return; }
   chatTitle.textContent = selectedPeer.name || 'Chat';
   callButtons.style.display = selectedPeer.type === 'user' ? 'flex' : 'none';
   chatBox.innerHTML = '';
 
+  // detach previous listener
+  if(messagesUnsub) messagesUnsub();
+
   let messagesQuery;
   if(selectedPeer.type === 'user'){
+    // For user-to-user chat: listen to all messages and filter locally to keep simple demo behavior
     messagesQuery = query(collection(db,'messages'), orderBy('timestamp'));
   } else {
     messagesQuery = query(collection(db,'messages'), where('to','==', selectedPeer.id), orderBy('timestamp'));
   }
 
-  onSnapshot(messagesQuery, snap => {
+  messagesUnsub = onSnapshot(messagesQuery, snap => {
     chatBox.innerHTML = '';
     snap.forEach(docu => {
       const m = docu.data();
@@ -414,7 +423,6 @@ function setupPeerConnection() {
     if (!event.candidate || !callDocRef) return;
     const cand = event.candidate.toJSON();
     const candidatesCol = (pc.__role === 'caller') ? collection(callDocRef, 'offerCandidates') : collection(callDocRef, 'answerCandidates');
-    // add candidate to appropriate subcollection
     addDoc(candidatesCol, cand).catch(e => console.error("candidate push failed", e));
   };
 
@@ -430,6 +438,7 @@ function setupPeerConnection() {
 
 /* Create call document (caller side) */
 async function createCallDocument(video = false) {
+  // create a new doc reference with random id
   callDocRef = doc(callsCol);
   // create peer connection and set role so ice handler writes to offerCandidates
   setupPeerConnection();
@@ -490,7 +499,7 @@ async function startCall(video=false){
   } catch(e){ alert("Kamera/Mikrofon nicht verfügbar"); return; }
 
   await createCallDocument(video);
-  outgoingCallSound.play();
+  outgoingCallSound.play().catch(()=>{});
 
   audioCallBtn.style.display='none'; videoCallBtn.style.display='none'; endCallBtn.style.display='inline-block';
 }
@@ -543,7 +552,7 @@ async function answerCall(callDocSnap){
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
 
-  // write answer to firestone doc
+  // write answer to firestore doc
   await updateDoc(callDocRef, { answer: answer.toJSON ? answer.toJSON() : answer, active: true });
 
   // listen for offerCandidates (caller -> answerer)
@@ -572,11 +581,6 @@ async function answerCall(callDocSnap){
 /* -------------------------
    Incoming calls watcher (listens for calls where to == me.uid)
 ------------------------- */
-onSnapshot(query(callsCol, where("to", "==", () => me ? me.uid : "___not_set___")), (snap) => {
-  // Note: Firestore SDK won't accept a function predicate; we'll instead attach watcher once me is defined
-});
-
-/* set up real incoming watcher after auth (so me.uid exists) */
 function setupIncomingWatcher(){
   if(!me) return;
   const q = query(callsCol, where("to", "==", me.uid));
@@ -594,20 +598,17 @@ function setupIncomingWatcher(){
 
         // show popup
         popupCallerTxt.textContent = `${callerName} ruft dich an (${data.type === 'video' ? 'Video' : 'Audio'})`;
-        incomingPopup.classList.add('show');
         incomingPopup.style.display = 'block';
         incomingCallSound.play().catch(()=>{});
         showNotification('Eingehender Anruf', `${callerName} ruft dich an`);
 
         // attach handlers (fresh for this call)
         acceptCallBtn.onclick = async () => {
-          incomingPopup.classList.remove('show');
           incomingPopup.style.display = 'none';
           incomingCallSound.pause();
           await answerCall(change.doc);
         };
         declineCallBtn.onclick = async () => {
-          incomingPopup.classList.remove('show');
           incomingPopup.style.display = 'none';
           incomingCallSound.pause();
           await updateDoc(change.doc.ref, { active: false }).catch(()=>{});
@@ -616,11 +617,6 @@ function setupIncomingWatcher(){
     });
   });
 }
-
-/* run watcher after auth ready */
-onAuthStateChanged(auth, (u) => {
-  if(u) setTimeout(setupIncomingWatcher, 500);
-});
 
 /* -------------------------
    Buttons hookup
@@ -632,26 +628,9 @@ endCallBtn.onclick = () => endCall();
 /* -------------------------
    Update Popup (floating button)
 ------------------------- */
-const updateBtn = document.createElement('button');
-updateBtn.textContent = 'Changelog anzeigen';
-updateBtn.className = 'floating-update-btn';
-document.body.appendChild(updateBtn);
-
-const updateDiv = document.createElement('div');
-updateDiv.innerHTML = `<h3>V1.4.2 Update</h3>
-<ul>
-<li>Call-Signalisierung (Firestore)</li>
-<li>Discord-style Popup</li>
-<li>Klingelton & Notifications</li>
-</ul>`;
-updateDiv.className = 'floating-update-panel';
-document.body.appendChild(updateDiv);
-
-let updateVisible = false;
-updateBtn.onclick = ()=>{
-  updateVisible = !updateVisible;
-  updateDiv.style.display = updateVisible?'block':'none';
-}
+showUpdateBtn.onclick = () => {
+  updatePopup.style.display = updatePopup.style.display === 'block' ? 'none' : 'block';
+};
 
 /* -------------------------
    Helper: small utilities (stubs for addContactByName/createGroup used elsewhere)
@@ -675,6 +654,7 @@ window.createGroup = async () => {
 
 </body>
 </html>
+
 
 
 
