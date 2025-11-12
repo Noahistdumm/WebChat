@@ -84,22 +84,17 @@
 </div>
 
 <script type="module">
-/* ==========================================
-   WebChat Deluxe — All-in-One JS (ca. 600 Zeilen)
-   - Auth (Firebase Auth)
-   - Firestore messages/groups/users
-   - Storage for images
-   - WebRTC group-call signaling (pairwise docs)
-   NOTE: Serve this file via HTTP (modules won't load via file://).
-   Replace firebaseConfig with your project's credentials.
-   ========================================== */
+// =======================
+// WebChat Deluxe Full 2.0
+// =======================
 
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, collection, addDoc, query, where, getDocs, onSnapshot, orderBy, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-storage.js";
+// ---- Firebase Imports ----
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
+import { getFirestore, doc, setDoc, collection, addDoc, getDocs, onSnapshot, query, orderBy, where, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-storage.js";
 
-/* ---------- CONFIG ---------- */
+// ---- Firebase Config ----
 const firebaseConfig = {
   apiKey: "AIzaSyCFgiS9au7GOzhJ7_ayBcBM3bZrEm5GJOA",
   authDomain: "webchat-a47cc.firebaseapp.com",
@@ -116,7 +111,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-/* ---------- UI refs ---------- */
+// ---- UI References ----
 const authArea = document.getElementById('authArea');
 const userArea = document.getElementById('userArea');
 const userInfo = document.getElementById('userInfo');
@@ -132,467 +127,348 @@ const endCallBtn = document.getElementById('endCallBtn');
 const messageInput = document.getElementById('messageInput');
 const imageInput = document.getElementById('imageInput');
 const previewImg = document.getElementById('previewImg');
-const typingIndicator = document.getElementById('typingIndicator');
 const videoGrid = document.getElementById('videoGrid');
 const incomingPopup = document.getElementById('incomingPopup');
 const popupCaller = document.getElementById('popupCaller');
 const acceptCallBtn = document.getElementById('acceptCallBtn');
 const declineCallBtn = document.getElementById('declineCallBtn');
 
+// ---- State ----
 let me = null;
-let selectedPeer = null; // {type:'user'|'group', id:, name:}
+let selectedPeer = null;
 let messagesUnsub = null;
 let selectedFile = null;
 let localStream = null;
-let peerConnections = {}; // peerId -> RTCPeerConnection
-let myOfferDocs = {};     // peerId -> docRef for offers we created (caller)
-let activeGroupCallId = null; // current group id calling or in
+let peerConnections = {};
+let myOfferDocs = {};
+let activeGroupCallId = null;
 
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
-const GROUP_CALLS_COL = 'groupCalls'; // collection for pairwise offer docs for group calls
+const GROUP_CALLS_COL = 'groupCalls';
 const groupCallsCol = collection(db, GROUP_CALLS_COL);
 
-/* ---------- Auth ---------- */
+// ========================
+// Auth Functions
+// ========================
 window.signup = async () => {
   const email = document.getElementById('email').value;
   const pw = document.getElementById('password').value;
-  if (!email || !pw) { alert('E-Mail + Passwort angeben'); return; }
+  if (!email || !pw) return alert('E-Mail + Passwort eingeben');
   try { await createUserWithEmailAndPassword(auth, email, pw); }
-  catch (e) { alert(e.message || e); }
+  catch(e) { alert(e.message); }
 };
+
 window.login = async () => {
   const email = document.getElementById('email').value;
   const pw = document.getElementById('password').value;
-  if (!email || !pw) { alert('E-Mail + Passwort angeben'); return; }
+  if (!email || !pw) return alert('E-Mail + Passwort eingeben');
   try { await signInWithEmailAndPassword(auth, email, pw); }
-  catch (e) { alert(e.message || e); }
-};
-window.logout = async () => {
-  try { await signOut(auth); } catch (e) {}
-  selectedPeer = null; chatBox.innerHTML = ''; videoGrid.innerHTML = ''; userArea.style.display = 'none'; authArea.style.display = 'block';
-  // cleanup any local stream & pcs
-  stopLocalStreams();
-  for (const k in peerConnections) { try { peerConnections[k].close(); } catch (e) {} }
-  peerConnections = {}; myOfferDocs = {}; activeGroupCallId = null;
+  catch(e) { alert(e.message); }
 };
 
-/* ---------- Auth state listener ---------- */
-onAuthStateChanged(auth, async (user) => {
-  if (user) {
-    me = { uid: user.uid, email: user.email, name: (user.email || '').split('@')[0] || 'User' };
-    // write user doc
-    try { await setDoc(doc(db, 'users', me.uid), me, { merge: true }); } catch (e) { console.error(e); }
-    authArea.style.display = 'none'; userArea.style.display = 'block';
+window.logout = async () => {
+  try { await signOut(auth); } catch(e) {}
+  selectedPeer = null;
+  chatBox.innerHTML = '';
+  videoGrid.innerHTML = '';
+  userArea.style.display = 'none';
+  authArea.style.display = 'block';
+  stopLocalStreams();
+  Object.values(peerConnections).forEach(pc=>pc.close());
+  peerConnections = {};
+  myOfferDocs = {};
+  activeGroupCallId = null;
+};
+
+// ========================
+// Auth State Listener
+// ========================
+onAuthStateChanged(auth, async (user)=>{
+  if(user){
+    me = { uid:user.uid, email:user.email, name:(user.email||'').split('@')[0] };
+    try{ await setDoc(doc(db,'users',me.uid),me,{merge:true}); } catch(e){ console.error(e);}
+    authArea.style.display='none'; userArea.style.display='block';
     userInfo.textContent = `Angemeldet als ${me.name}`;
     loadContacts(); loadGroups();
     chatTitle.textContent = 'Wähle einen Chat';
-    setupIncomingWatcher(); // listens for group call offers aimed at me
+    setupIncomingWatcher();
   } else {
     me = null;
-    authArea.style.display = 'block'; userArea.style.display = 'none';
-    chatTitle.textContent = 'Bitte anmelden';
-    chatBox.innerHTML = ''; videoGrid.innerHTML = '';
+    authArea.style.display='block'; userArea.style.display='none';
+    chatTitle.textContent='Bitte anmelden';
+    chatBox.innerHTML=''; videoGrid.innerHTML='';
   }
 });
 
-/* ---------- Load contacts & groups ---------- */
-async function loadContacts() {
-  contactsDiv.innerHTML = '';
-  const uCol = collection(db, 'users');
-  const snap = await getDocs(uCol);
-  snap.forEach(d => {
+// ========================
+// Load Contacts & Groups
+// ========================
+async function loadContacts(){
+  contactsDiv.innerHTML='';
+  const snap = await getDocs(collection(db,'users'));
+  snap.forEach(d=>{
     const u = d.data();
-    if (u.uid === me.uid) return;
-    const div = document.createElement('div'); div.className = 'contact-item';
-    const left = document.createElement('span'); left.textContent = u.name || u.email || 'User';
-    const right = document.createElement('span'); right.className = 'muted';
-    div.appendChild(left); div.appendChild(right);
-    div.onclick = () => { selectChat({ type: 'user', id: u.uid, name: u.name || u.email }); };
+    if(u.uid === me.uid) return;
+    const div = document.createElement('div');
+    div.className='contact-item';
+    div.textContent = u.name;
+    div.onclick = ()=>selectChat({type:'user',id:u.uid,name:u.name});
     contactsDiv.appendChild(div);
   });
 }
 
-async function loadGroups() {
-  groupsDiv.innerHTML = '';
-  if (!me) return;
-  const q = query(collection(db, 'groups'), where('members', 'array-contains', me.uid));
+async function loadGroups(){
+  groupsDiv.innerHTML='';
+  if(!me) return;
+  const q = query(collection(db,'groups'), where('members','array-contains',me.uid));
   const snap = await getDocs(q);
-  snap.forEach(d => {
+  snap.forEach(d=>{
     const g = d.data();
-    const div = document.createElement('div'); div.className = 'group-item';
-    const left = document.createElement('span'); left.textContent = g.name || 'Gruppe';
-    const right = document.createElement('span'); right.className = 'muted'; right.textContent = (g.members||[]).length + ' Mitglieder';
-    div.appendChild(left); div.appendChild(right);
-    div.onclick = () => { selectChat({ type: 'group', id: d.id, name: g.name }); };
+    const div = document.createElement('div');
+    div.className='group-item';
+    div.textContent=g.name;
+    div.onclick=()=>selectChat({type:'group',id:d.id,name:g.name});
     groupsDiv.appendChild(div);
   });
 }
 
-/* ---------- Chat logic ---------- */
-async function selectChat(peer) {
+// ========================
+// Chat Functions
+// ========================
+async function selectChat(peer){
   selectedPeer = peer;
-  chatTitle.textContent = peer.name || 'Chat';
-  chatBox.innerHTML = '';
-  callButtons.style.display = (peer.type === 'user') ? 'flex' : 'none';
-  if (messagesUnsub) messagesUnsub();
-  // query messages: for simplicity we store messages with {from,to,...}
+  chatTitle.textContent=peer.name;
+  chatBox.innerHTML='';
+  callButtons.style.display = (peer.type==='user')?'flex':'none';
+  if(messagesUnsub) messagesUnsub();
+
   let messagesQuery;
-  if (peer.type === 'user') {
-    messagesQuery = query(collection(db, 'messages'), orderBy('timestamp'));
+  if(peer.type==='user'){
+    messagesQuery=query(collection(db,'messages'), orderBy('timestamp'));
   } else {
-    messagesQuery = query(collection(db, 'messages'), where('to', '==', peer.id), orderBy('timestamp'));
+    messagesQuery=query(collection(db,'messages'), where('to','==',peer.id), orderBy('timestamp'));
   }
-  messagesUnsub = onSnapshot(messagesQuery, snap => {
-    chatBox.innerHTML = '';
-    const typingUsers = new Set();
-    snap.forEach(docu => {
-      const m = docu.data();
-      if (peer.type === 'user') {
-        if ((m.from === me.uid && m.to === peer.id) || (m.from === peer.id && m.to === me.uid)) {
-          renderMessage(m);
-        }
+
+  messagesUnsub = onSnapshot(messagesQuery, snap=>{
+    chatBox.innerHTML='';
+    snap.forEach(docu=>{
+      const m=docu.data();
+      if(peer.type==='user'){
+        if((m.from===me.uid && m.to===peer.id)||(m.from===peer.id && m.to===me.uid)) renderMessage(m);
       } else {
-        if (m.to === peer.id) renderMessage(m);
+        if(m.to===peer.id) renderMessage(m);
       }
-      if (m.typing && m.from !== me.uid) typingUsers.add(m.fromName || 'User');
     });
-    typingIndicator.textContent = typingUsers.size ? `${Array.from(typingUsers).join(', ')} schreibt...` : 'Niemand schreibt gerade...';
-    chatBox.scrollTop = chatBox.scrollHeight;
+    chatBox.scrollTop=chatBox.scrollHeight;
   });
 }
 
-function renderMessage(m) {
-  if (!m) return;
-  if (m.type === 'image') {
-    const img = document.createElement('img'); img.src = m.url; img.className = 'preview-img message ' + (m.from === me.uid ? 'sent' : 'received');
+function renderMessage(m){
+  if(!m) return;
+  if(m.type==='image'){
+    const img=document.createElement('img');
+    img.src=m.url; img.className='preview-img message ' + (m.from===me.uid?'sent':'received');
     chatBox.appendChild(img);
   } else {
-    const d = document.createElement('div'); d.className = 'message ' + (m.from === me.uid ? 'sent' : 'received'); d.textContent = (m.fromName ? `${m.fromName}: ` : '') + (m.text || '');
+    const d=document.createElement('div');
+    d.className='message ' + (m.from===me.uid?'sent':'received');
+    d.textContent=(m.fromName?m.fromName+': ':'')+(m.text||'');
     chatBox.appendChild(d);
   }
 }
 
-/* send text */
-window.sendMessage = async () => {
-  if (!selectedPeer) { alert('Wähle erst einen Chat'); return; }
+// Send Message
+window.sendMessage=async()=>{
+  if(!selectedPeer) return alert('Wähle erst einen Chat');
   const text = messageInput.value.trim();
-  if (!text) return;
-  await addDoc(collection(db, 'messages'), { from: me.uid, fromName: me.name, to: selectedPeer.id, type: 'text', text, timestamp: Date.now() });
-  messageInput.value = '';
+  if(!text) return;
+  await addDoc(collection(db,'messages'),{
+    from: me.uid,
+    fromName: me.name,
+    to: selectedPeer.id,
+    type:'text',
+    text,
+    timestamp: Date.now()
+  });
+  messageInput.value='';
 };
 
-/* image handling */
-imageInput.addEventListener('change', e => {
-  selectedFile = e.target.files[0];
-  if (selectedFile) { previewImg.src = URL.createObjectURL(selectedFile); previewImg.style.display = 'block'; } else previewImg.style.display = 'none';
+// Send Image
+imageInput.addEventListener('change',e=>{
+  selectedFile=e.target.files[0];
+  if(selectedFile){ previewImg.src=URL.createObjectURL(selectedFile); previewImg.style.display='block'; }
+  else previewImg.style.display='none';
 });
-window.sendImage = async () => {
-  if (!selectedPeer) { alert('Wähle erst einen Chat'); return; }
-  if (!selectedFile) { alert('Keine Datei ausgewählt'); return; }
-  const clean = selectedFile.name.replace(/[^\w.-]/g, '_');
+window.sendImage=async()=>{
+  if(!selectedPeer) return alert('Wähle erst einen Chat');
+  if(!selectedFile) return alert('Keine Datei ausgewählt');
+  const clean = selectedFile.name.replace(/[^\w.-]/g,'_');
   const path = `chatImages/${me.uid}_${Date.now()}_${clean}`;
-  const storageRef = ref(storage, path);
-  const snap = await uploadBytes(storageRef, selectedFile);
-  const url = await getDownloadURL(snap.ref);
-  await addDoc(collection(db, 'messages'), { from: me.uid, fromName: me.name, to: selectedPeer.id, type: 'image', url, timestamp: Date.now() });
-  selectedFile = null; imageInput.value = ''; previewImg.style.display = 'none';
-}
+  const storageRef=ref(storage,path);
+  const snap=await uploadBytes(storageRef,selectedFile);
+  const url=await getDownloadURL(snap.ref);
+  await addDoc(collection(db,'messages'),{
+    from: me.uid,
+    fromName: me.name,
+    to: selectedPeer.id,
+    type:'image',
+    url,
+    timestamp: Date.now()
+  });
+  selectedFile=null; imageInput.value=''; previewImg.style.display='none';
+};
 
-/* typing indicator: write a lightweight typing message (demo) */
-let typingTimer = null;
-messageInput.addEventListener('input', async () => {
-  if (!selectedPeer) return;
-  // write a small typing doc by adding a message with typing flag (demo, not ideal for prod)
-  await addDoc(collection(db, 'messages'), { from: me.uid, fromName: me.name, to: selectedPeer.id, typing: true, timestamp: Date.now() });
+// Typing Indicator
+let typingTimer=null;
+messageInput.addEventListener('input', async ()=>{
+  if(!selectedPeer) return;
+  await addDoc(collection(db,'messages'),{from:me.uid,fromName:me.name,to:selectedPeer.id,typing:true,timestamp:Date.now()});
   clearTimeout(typingTimer);
-  typingTimer = setTimeout(async () => {
-    // demo: not removing typing docs to keep it simple
-  }, 1000);
+  typingTimer=setTimeout(()=>{},1000);
 });
 
-/* ---------- Utilities ---------- */
-function showNotification(title, body) {
-  if (!("Notification" in window)) return;
-  if (Notification.permission === "granted") new Notification(title, { body });
-  else if (Notification.permission !== "denied") Notification.requestPermission().then(p => { if (p === "granted") new Notification(title, { body }); });
-}
+// ========================
+// Groups
+// ========================
+window.createGroup = async ()=>{
+  const name=document.getElementById('newGroupName').value.trim();
+  if(!name) return alert('Gruppenname angeben');
+  await addDoc(collection(db,'groups'),{name,members:[me.uid],created:Date.now()});
+  loadGroups();
+};
 
-/* ---------- Group call signalling via Firestore (pairwise docs) ----------
-   Approach:
-   - Caller iterates group members (except self), creates an offer PC for each -> creates offer SDP
-   - For each callee: addDoc(collection('groupCalls'), { from: me.uid, to: peerId, group: groupId, offer, active: true })
-   - Caller listens to that doc for answer field; also creates subcollection 'offerCandidates' where caller pushes ICE
-   - Callee listens for docs where to==me.uid and group==groupId and active==true, shows incoming popup; if accepts:
-       - create PC, setRemoteDescription(offer), add tracks, createAnswer(), updateDoc(docRef, { answer })
-       - write ICE candidates to answerCandidates
-   - Both sides listen for candidate subcollections and addIceCandidate accordingly.
-   - To end: updateDoc(docRef, { active: false })
--------------------------------------------------------------------------*/
+// ========================
+// WebRTC Functions
+// ========================
 
-const groupCallsColRef = collection(db, GROUP_CALLS_COL);
+// --- create PeerConnection ---
+function createPC(role, peerId, docRef=null){
+  const pc = new RTCPeerConnection({iceServers: ICE_SERVERS});
 
-/* create RTCPeerConnection helper */
-function createPC(role, peerId, docRef=null) {
-  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
-  pc.onicecandidate = e => {
-    if (!e.candidate) return;
+  pc.onicecandidate = e=>{
+    if(!e.candidate) return;
     const cand = e.candidate.toJSON();
-    if (!docRef) return;
-    // caller writes to offerCandidates, callee to answerCandidates
-    const colName = (role === 'caller') ? 'offerCandidates' : 'answerCandidates';
-    addDoc(collection(docRef, colName), cand).catch(console.error);
+    if(!docRef) return;
+    const colName = (role==='caller')?'offerCandidates':'answerCandidates';
+    addDoc(collection(docRef,colName), cand).catch(console.error);
   };
 
-  pc.ontrack = e => {
-    // attach to video element if exists; else create
-    const id = 'video_' + peerId;
-    let v = document.getElementById(id);
-    if (!v) {
-      v = document.createElement('video'); v.id = id; v.autoplay = true; v.playsInline = true; v.style.borderRadius = '8px';
+  pc.ontrack = e=>{
+    const id='video_'+peerId;
+    let v=document.getElementById(id);
+    if(!v){
+      v=document.createElement('video'); v.id=id; v.autoplay=true; v.playsInline=true; v.style.borderRadius='8px';
       videoGrid.appendChild(v);
     }
-    try { v.srcObject = e.streams[0]; } catch (err) { console.error(err); }
+    try{ v.srcObject = e.streams[0]; } catch(err){ console.error(err);}
   };
 
   return pc;
 }
 
-/* Caller: start group video call */
-async function startGroupVideoCall() {
-  if (!selectedPeer || selectedPeer.type !== 'group') { alert('Wähle eine Gruppe'); return; }
-  // load group doc to get members
-  const groupDocRef = doc(db, 'groups', selectedPeer.id);
-  const groupSnap = await getDoc(groupDocRef);
-  if (!groupSnap.exists()) { alert('Gruppendaten nicht gefunden'); return; }
-  const groupData = groupSnap.data();
-  const members = groupData.members || [];
-  const others = members.filter(uid => uid !== me.uid);
-  if (!others.length) { alert('Keine anderen Mitglieder'); return; }
+// --- start group video call ---
+async function startGroupVideoCall(){
+  if(!selectedPeer||selectedPeer.type!=='group') return alert('Wähle eine Gruppe');
+  const groupDocRef=doc(db,'groups',selectedPeer.id);
+  const groupSnap=await getDoc(groupDocRef);
+  if(!groupSnap.exists()) return alert('Gruppe nicht gefunden');
+  const members=(groupSnap.data().members||[]).filter(uid=>uid!==me.uid);
+  if(!members.length) return alert('Keine anderen Mitglieder');
 
-  // get local stream
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  } catch (e) {
-    alert('Kamera/Mikrofon nicht verfügbar'); console.error(e); return;
-  }
+  try{ localStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true}); }
+  catch(e){ alert('Kamera/Mikrofon nicht verfügbar'); return;}
 
-  // show local video
-  let localV = document.getElementById('video_local');
-  if (!localV) {
-    localV = document.createElement('video'); localV.id = 'video_local'; localV.autoplay = true; localV.muted = true; localV.playsInline = true;
-    videoGrid.appendChild(localV);
-  }
+  let localV=document.getElementById('video_local');
+  if(!localV){ localV=document.createElement('video'); localV.id='video_local'; localV.autoplay=true; localV.muted=true; localV.playsInline=true; videoGrid.appendChild(localV);}
   localV.srcObject = localStream;
 
-  // For each member create PC, createOffer and write doc
-  for (const peerId of others) {
-    const pc = createPC('caller', peerId);
-    peerConnections[peerId] = pc;
-
-    // add local tracks
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    // make offer
-    const offerDesc = await pc.createOffer();
+  for(const peerId of members){
+    const pc=createPC('caller',peerId);
+    peerConnections[peerId]=pc;
+    localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+    const offerDesc=await pc.createOffer();
     await pc.setLocalDescription(offerDesc);
+    const callDoc = await addDoc(groupCallsCol,{
+      from: me.uid, to:peerId, group:selectedPeer.id, offer:offerDesc.toJSON(), active:true, createdAt:Date.now()
+    });
+    myOfferDocs[peerId]=callDoc;
 
-    // create call doc
-    const callDoc = await addDoc(groupCallsColRef, {
-      from: me.uid,
-      to: peerId,
-      group: selectedPeer.id,
-      offer: offerDesc.toJSON ? offerDesc.toJSON() : offerDesc,
-      active: true,
-      createdAt: Date.now()
+    onSnapshot(callDoc, async snap=>{
+      const data=snap.data();
+      if(!data) return;
+      if(data.answer && !pc.currentRemoteDescription) await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      if(data.active===false){ try{pc.close();}catch(e){} delete peerConnections[peerId]; const v=document.getElementById('video_'+peerId); if(v)v.remove();}
     });
 
-    myOfferDocs[peerId] = callDoc;
-
-    // listen for answer on this doc
-    onSnapshot(callDoc, async snap => {
-      const data = snap.data();
-      if (!data) return;
-      if (data.answer && pc && !pc.currentRemoteDescription) {
-        const ansDesc = new RTCSessionDescription(data.answer);
-        await pc.setRemoteDescription(ansDesc).catch(console.error);
-      }
-      if (data.active === false) { // callee declined/ended
-        try { pc.close(); } catch (e) {}
-        delete peerConnections[peerId];
-        // remove video element if exists
-        const v = document.getElementById('video_' + peerId); if (v) v.remove();
-      }
-    });
-
-    // listen for answerCandidates
-    const answerCandidatesCol = collection(callDoc, 'answerCandidates');
-    onSnapshot(answerCandidatesCol, snap => {
-      snap.docChanges().forEach(change => {
-        if (change.type === 'added') {
-          const c = change.doc.data();
-          pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.error);
-        }
-      });
-    });
-
-    // also listen for offerCandidates is optional for caller (not needed if only caller pushes its own candidates)
-    const offerCandidatesCol = collection(callDoc, 'offerCandidates');
-    onSnapshot(offerCandidatesCol, snap => {
-      snap.docChanges().forEach(change => {
-        if (change.type === 'added') {
-          const c = change.doc.data();
-          // mostly duplicates for caller; ignore or use if necessary
-        }
+    const answerCandidatesCol=collection(callDoc,'answerCandidates');
+    onSnapshot(answerCandidatesCol,snapc=>{
+      snapc.docChanges().forEach(ch=>{
+        if(ch.type==='added') pc.addIceCandidate(new RTCIceCandidate(ch.doc.data())).catch(console.error);
       });
     });
   }
 
   activeGroupCallId = selectedPeer.id;
-  endCallBtn.style.display = 'inline-block';
+  endCallBtn.style.display='inline-block';
 }
 
-/* Callee handling: watch for documents where to==me.uid and group==selectedPeer.id */
-function setupIncomingWatcher() {
-  // listen for all incoming group call offers targeted at me
-  const q = query(groupCallsColRef, where('to', '==', me ? me.uid : ''));
-  onSnapshot(q, async snap => {
-    snap.docChanges().forEach(async change => {
-      if (change.type !== 'added') return;
-      const data = change.doc.data();
-      const docRef = change.doc.ref;
-      if (!data || !data.active) return;
-      // Only act on group offers (group present)
-      if (!data.group) return;
-      // If this offer is part of currently selected group, show popup — else still notify
-      const groupId = data.group;
-      // Show incoming popup to user
-      popupCaller.textContent = `Gruppe: ${groupId} — von: ${data.from}`;
-      incomingPopup.style.display = 'block';
+groupVideoBtn.onclick=startGroupVideoCall;
 
-      acceptCallBtn.onclick = async () => {
-        incomingPopup.style.display = 'none';
-        // create PC, setRemoteDescription(offer), add local tracks, create answer, update doc
-        try {
-          localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        } catch (e) {
-          alert('Kamera/Mikrofon nicht verfügbar'); return;
-        }
-        // create pc for this caller (data.from)
+function stopLocalStreams(){
+  if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; const lv=document.getElementById('video_local'); if(lv) lv.remove();}
+}
+
+async function endAllGroupCalls(){
+  for(const pid in myOfferDocs){ try{ await updateDoc(myOfferDocs[pid],{active:false});} catch(e){} }
+  Object.values(peerConnections).forEach(pc=>pc.close());
+  peerConnections={}; myOfferDocs={}; activeGroupCallId=null;
+  stopLocalStreams();
+  endCallBtn.style.display='none';
+  videoGrid.innerHTML='';
+}
+
+endCallBtn.onclick=endAllGroupCalls;
+
+// --- Incoming calls ---
+function setupIncomingWatcher(){
+  const q=query(groupCallsCol, where('to','==',me?me.uid:''));
+  onSnapshot(q,snap=>{
+    snap.docChanges().forEach(async change=>{
+      if(change.type!=='added') return;
+      const data=change.doc.data();
+      const docRef=change.doc.ref;
+      if(!data||!data.active||!data.group) return;
+      popupCaller.textContent=`Gruppe: ${data.group} — von: ${data.from}`;
+      incomingPopup.style.display='block';
+
+      acceptCallBtn.onclick=async()=>{
+        incomingPopup.style.display='none';
+        try{ localStream=await navigator.mediaDevices.getUserMedia({video:true,audio:true}); }
+        catch(e){ alert('Kamera/Mikrofon nicht verfügbar'); return;}
         const callerId = data.from;
-        const pc = createPC('answerer', callerId, docRef);
-        peerConnections[callerId] = pc;
-
-        // add local tracks
-        localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
-        // local video element
-        let v = document.getElementById('video_local');
-        if (!v) { v = document.createElement('video'); v.id = 'video_local'; v.autoplay = true; v.muted = true; v.playsInline = true; v.srcObject = localStream; videoGrid.appendChild(v); }
-
-        // set remote (offer)
-        const offer = data.offer;
-        const offerDesc = new RTCSessionDescription(offer);
-        await pc.setRemoteDescription(offerDesc);
-
-        // create answer
-        const answer = await pc.createAnswer();
+        const pc=createPC('answerer',callerId,docRef);
+        peerConnections[callerId]=pc;
+        localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+        let v=document.getElementById('video_local');
+        if(!v){ v=document.createElement('video'); v.id='video_local'; v.autoplay=true; v.muted=true; v.playsInline=true; v.srcObject=localStream; videoGrid.appendChild(v);}
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer=await pc.createAnswer();
         await pc.setLocalDescription(answer);
-
-        // write answer to the same doc
-        await updateDoc(docRef, { answer: answer.toJSON ? answer.toJSON() : answer, active: true });
-
-        // listen for offerCandidates (from caller)
-        const offerCandidatesCol = collection(docRef, 'offerCandidates');
-        onSnapshot(offerCandidatesCol, snapc => {
-          snapc.docChanges().forEach(ch => {
-            if (ch.type === 'added') {
-              const c = ch.doc.data();
-              pc.addIceCandidate(new RTCIceCandidate(c)).catch(console.error);
-            }
-          });
-        });
-
-        // push our answer candidates to answerCandidates
-        pc.onicecandidate = e => {
-          if (!e.candidate) return;
-          const cand = e.candidate.toJSON();
-          addDoc(collection(docRef, 'answerCandidates'), cand).catch(console.error);
-        };
-
-        // listen for call deactivation
-        onSnapshot(docRef, (s) => {
-          const d = s.data();
-          if (!d) return;
-          if (d.active === false) {
-            try { pc.close(); } catch (e) {}
-            delete peerConnections[callerId];
-            const rv = document.getElementById('video_' + callerId); if (rv) rv.remove();
-          }
-        });
+        await updateDoc(docRef,{answer:answer.toJSON(),active:true});
+        const offerCandidatesCol=collection(docRef,'offerCandidates');
+        onSnapshot(offerCandidatesCol,snapc=>{ snapc.docChanges().forEach(ch=>{ if(ch.type==='added') pc.addIceCandidate(new RTCIceCandidate(ch.doc.data())).catch(console.error); });});
       };
 
-      declineCallBtn.onclick = async () => {
-        incomingPopup.style.display = 'none';
-        // mark this call doc as inactive (declined)
-        await updateDoc(change.doc.ref, { active: false }).catch(console.error);
+      declineCallBtn.onclick=async()=>{
+        incomingPopup.style.display='none';
+        await updateDoc(docRef,{active:false}).catch(console.error);
       };
     });
   });
 }
 
-/* Stop local streams helper */
-function stopLocalStreams() {
-  if (localStream) {
-    localStream.getTracks().forEach(t => t.stop());
-    localStream = null;
-    const lv = document.getElementById('video_local'); if (lv) lv.remove();
-  }
-}
-
-/* End all group calls (caller side) */
-async function endAllGroupCalls() {
-  // set active = false on all offer docs we created
-  for (const peerId in myOfferDocs) {
-    try { await updateDoc(myOfferDocs[peerId], { active: false }); } catch (e) {}
-  }
-  // cleanup
-  for (const k in peerConnections) { try { peerConnections[k].close(); } catch (e) {} }
-  peerConnections = {}; myOfferDocs = {}; activeGroupCallId = null;
-  stopLocalStreams();
-  endCallBtn.style.display = 'none';
-  videoGrid.innerHTML = '';
-}
-
-/* UI hook for group video start */
-groupVideoBtn.onclick = () => startGroupVideoCall();
-
-/* UI hook for end call */
-endCallBtn.onclick = () => endAllGroupCalls();
-
-/* helper: create contact / group (demo) */
-window.addContactByName = async () => {
-  const n = document.getElementById('addContactInput').value.trim();
-  if (!n) return alert('Name angeben');
-  const fid = 'tmp_' + Date.now();
-  await setDoc(doc(db, 'users', fid), { uid: fid, name: n, email: `${n}@example.local` });
-  loadContacts();
-};
-
-window.createGroup = async () => {
-  const name = document.getElementById('newGroupName').value.trim();
-  if (!name) return alert('Gruppenname angeben');
-  // initial member: me (for demo)
-  await addDoc(collection(db, 'groups'), { name, members: [me.uid], created: Date.now() });
-  loadGroups();
-};
-
-/* small helpers */
-function showProfile(){ alert(`Profil: ${me ? me.name : '—'}`); }
-
-/* load initial if logged in */
-if (Notification && Notification.permission !== "granted") { Notification.requestPermission().catch(()=>{}); }
-
 </script>
+
 </body>
 </html>
 
