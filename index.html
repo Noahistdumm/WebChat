@@ -1,96 +1,115 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>WebChat Deluxe V1.4.6</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebChat Deluxe V1.4.6.1</title>
 
-  <!-- CSS (beide, klein geschrieben, wie du meintest) -->
+  <!-- CSS -->
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="extra.css">
 </head>
 <body>
 
 <div class="container">
-  <div class="sidebar" id="sidebar">
-    <h2>WebChat Deluxe <small style="font-weight:600">V—</small></h2>
 
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <h2>WebChat Deluxe <small>1.4.6.1</small></h2>
+
+    <!-- AUTH -->
     <div id="authArea">
       <input id="email" type="email" placeholder="E-Mail">
       <input id="password" type="password" placeholder="Passwort">
-      <div style="display:flex;gap:8px">
-        <button onclick="signup()">Registrieren</button>
-        <button onclick="login()">Anmelden</button>
-      </div>
+      <button onclick="signup()">Registrieren</button>
+      <button onclick="login()">Anmelden</button>
     </div>
 
+    <!-- USER -->
     <div id="userArea" style="display:none">
-      <div id="userInfo" class="muted">—</div>
-      <div style="display:flex;gap:8px;margin-top:6px">
-        <button onclick="logout()">Abmelden</button>
-        <button onclick="showProfile()">Profil</button>
-      </div>
+      <div id="userInfo"></div>
 
-      <hr style="border:none;height:8px"/>
+      <button onclick="logout()">Abmelden</button>
+      <button onclick="showProfile()">Profil</button>
+
+      <hr>
 
       <h4>Kontakte</h4>
-      <div class="contacts" id="contacts"></div>
-      <input id="addContactInput" type="text" placeholder="Name hinzufügen">
-      <button onclick="addContactByName()">Kontakt anlegen</button>
+      <div id="contacts"></div>
 
-      <hr style="border:none;height:8px"/>
+      <hr>
 
       <h4>Gruppen</h4>
-      <div class="groups" id="groups"></div>
-      <input id="newGroupName" type="text" placeholder="Gruppenname">
-      <button onclick="createGroup()">Gruppe erstellen</button>
+      <div id="groups"></div>
 
-      <div class="footer-small">Demo: Firebase Firestore & Storage</div>
+      <input id="newGroupName" placeholder="Gruppenname">
+      <button onclick="createGroup()">Gruppe erstellen</button>
     </div>
   </div>
 
-  <div class="main" id="main">
+  <!-- MAIN -->
+  <div class="main">
     <div class="chat-header">
       <h3 id="chatTitle">Bitte anmelden</h3>
-      <div id="callButtons" style="display:none;gap:8px">
+      <div id="callButtons" style="display:none">
         <button id="groupVideoBtn">👥🎥</button>
         <button id="endCallBtn" style="display:none">❌</button>
       </div>
     </div>
 
-    <div id="chatBox" class="chat-box"></div>
-    <div id="typingIndicator" class="typing-indicator">Niemand schreibt gerade…</div>
+    <div id="chatBox"></div>
 
     <div class="input-row">
-      <input id="messageInput" type="text" placeholder="Schreib eine Nachricht…">
+      <input id="messageInput" placeholder="Nachricht">
       <input id="imageInput" type="file" accept="image/*">
       <button onclick="sendMessage()">Senden</button>
-      <button onclick="sendImage()">Bild senden</button>
+      <button onclick="sendImage()">Bild</button>
     </div>
 
-    <img id="previewImg" class="preview-img" style="display:none">
-    <div id="videoGrid" class="video-grid"></div>
+    <img id="previewImg" style="display:none">
+    <div id="videoGrid"></div>
   </div>
+
 </div>
 
-<div id="incomingPopup" class="incoming-popup" style="display:none">
-  <h3>Eingehender Gruppenanruf</h3>
+<!-- INCOMING CALL -->
+<div id="incomingPopup" style="display:none">
   <p id="popupCaller"></p>
   <button id="acceptCallBtn">Annehmen</button>
   <button id="declineCallBtn">Ablehnen</button>
 </div>
 
 <script type="module">
-/************************************************************
- * WEBCHAT DELUXE – KORRIGIERTE VERSION
- * Funktional, keine fehlenden Funktionen, ~gleich lang
- ************************************************************/
 
 /* ================= FIREBASE IMPORTS ================= */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, collection, addDoc, getDocs, onSnapshot, query, where, orderBy } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-storage.js";
+import {
+  getAuth,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  updateDoc
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-storage.js";
 
 /* ================= FIREBASE CONFIG ================= */
 const firebaseConfig = {
@@ -111,102 +130,109 @@ let me = null;
 let selectedPeer = null;
 let selectedFile = null;
 let messagesUnsub = null;
+let localStream = null;
+let peerConnections = {};
+let offerDocs = {};
 
 /* ================= UI ================= */
-const authArea = document.getElementById('authArea');
-const userArea = document.getElementById('userArea');
-const userInfo = document.getElementById('userInfo');
-const contactsDiv = document.getElementById('contacts');
-const groupsDiv = document.getElementById('groups');
-const chatBox = document.getElementById('chatBox');
-const chatTitle = document.getElementById('chatTitle');
-const messageInput = document.getElementById('messageInput');
-const imageInput = document.getElementById('imageInput');
-const previewImg = document.getElementById('previewImg');
+const authArea = document.getElementById("authArea");
+const userArea = document.getElementById("userArea");
+const userInfo = document.getElementById("userInfo");
+const contactsDiv = document.getElementById("contacts");
+const groupsDiv = document.getElementById("groups");
+const chatBox = document.getElementById("chatBox");
+const chatTitle = document.getElementById("chatTitle");
+const messageInput = document.getElementById("messageInput");
+const imageInput = document.getElementById("imageInput");
+const previewImg = document.getElementById("previewImg");
+const groupVideoBtn = document.getElementById("groupVideoBtn");
+const endCallBtn = document.getElementById("endCallBtn");
+const popup = document.getElementById("incomingPopup");
+const popupCaller = document.getElementById("popupCaller");
+const acceptBtn = document.getElementById("acceptCallBtn");
+const declineBtn = document.getElementById("declineCallBtn");
 
 /* ================= AUTH ================= */
 window.signup = async () => {
-  const email = document.getElementById('email').value;
-  const pw = document.getElementById('password').value;
-  if (!email || !pw) return alert('E-Mail + Passwort fehlt');
-  await createUserWithEmailAndPassword(auth, email, pw);
+  const email = document.getElementById("email").value.trim();
+  const pw = document.getElementById("password").value;
+  try {
+    await createUserWithEmailAndPassword(auth, email, pw);
+  } catch (e) {
+    alert(e.code + " | " + e.message);
+  }
 };
 
 window.login = async () => {
-  const email = document.getElementById('email').value;
-  const pw = document.getElementById('password').value;
-  if (!email || !pw) return alert('E-Mail + Passwort fehlt');
-  await signInWithEmailAndPassword(auth, email, pw);
+  const email = document.getElementById("email").value.trim();
+  const pw = document.getElementById("password").value;
+  try {
+    await signInWithEmailAndPassword(auth, email, pw);
+  } catch (e) {
+    alert(e.code + " | " + e.message);
+  }
 };
 
 window.logout = async () => {
   await signOut(auth);
-  chatBox.innerHTML = '';
 };
 
 /* ================= AUTH STATE ================= */
 onAuthStateChanged(auth, async user => {
   if (!user) {
-    authArea.style.display = 'block';
-    userArea.style.display = 'none';
+    authArea.style.display = "block";
+    userArea.style.display = "none";
     return;
   }
 
   me = {
     uid: user.uid,
-    name: user.email.split('@')[0]
+    name: user.email.split("@")[0]
   };
 
-  await setDoc(doc(db, 'users', me.uid), me, { merge: true });
+  await setDoc(doc(db, "users", me.uid), me, { merge: true });
 
-  authArea.style.display = 'none';
-  userArea.style.display = 'block';
-  userInfo.textContent = `Angemeldet als ${me.name}`;
+  authArea.style.display = "none";
+  userArea.style.display = "block";
+  userInfo.textContent = "Angemeldet als " + me.name;
 
   loadContacts();
   loadGroups();
+  setupIncomingCalls();
 });
 
 /* ================= CONTACTS ================= */
 async function loadContacts() {
-  contactsDiv.innerHTML = '';
-  const snap = await getDocs(collection(db, 'users'));
+  contactsDiv.innerHTML = "";
+  const snap = await getDocs(collection(db, "users"));
   snap.forEach(d => {
     if (d.id === me.uid) return;
-    const div = document.createElement('div');
-    div.className = 'contact-item';
+    const div = document.createElement("div");
     div.textContent = d.data().name;
-    div.onclick = () => selectChat({ type: 'user', id: d.id, name: d.data().name });
+    div.onclick = () => selectChat({ type:"user", id:d.id, name:d.data().name });
     contactsDiv.appendChild(div);
   });
 }
 
-window.addContactByName = () => {
-  alert('Kontakte kommen automatisch aus Firebase');
-};
-
 /* ================= GROUPS ================= */
 async function loadGroups() {
-  groupsDiv.innerHTML = '';
-  const q = query(collection(db, 'groups'), where('members', 'array-contains', me.uid));
+  groupsDiv.innerHTML = "";
+  const q = query(collection(db, "groups"), where("members", "array-contains", me.uid));
   const snap = await getDocs(q);
   snap.forEach(d => {
-    const g = d.data();
-    const div = document.createElement('div');
-    div.className = 'group-item';
-    div.textContent = g.name;
-    div.onclick = () => selectChat({ type: 'group', id: d.id, name: g.name });
+    const div = document.createElement("div");
+    div.textContent = d.data().name;
+    div.onclick = () => selectChat({ type:"group", id:d.id, name:d.data().name });
     groupsDiv.appendChild(div);
   });
 }
 
 window.createGroup = async () => {
-  const name = document.getElementById('newGroupName').value.trim();
-  if (!name) return alert('Gruppenname fehlt');
-  await addDoc(collection(db, 'groups'), {
+  const name = document.getElementById("newGroupName").value.trim();
+  await addDoc(collection(db, "groups"), {
     name,
-    members: [me.uid],
-    created: Date.now()
+    members:[me.uid],
+    created:Date.now()
   });
   loadGroups();
 };
@@ -215,20 +241,20 @@ window.createGroup = async () => {
 function selectChat(peer) {
   selectedPeer = peer;
   chatTitle.textContent = peer.name;
-  chatBox.innerHTML = '';
+  chatBox.innerHTML = "";
 
   if (messagesUnsub) messagesUnsub();
 
-  const q = peer.type === 'group'
-    ? query(collection(db, 'messages'), where('to', '==', peer.id), orderBy('timestamp'))
-    : query(collection(db, 'messages'), orderBy('timestamp'));
+  const q = peer.type === "group"
+    ? query(collection(db,"messages"), where("to","==",peer.id), orderBy("timestamp"))
+    : query(collection(db,"messages"), orderBy("timestamp"));
 
   messagesUnsub = onSnapshot(q, snap => {
-    chatBox.innerHTML = '';
+    chatBox.innerHTML = "";
     snap.forEach(d => {
       const m = d.data();
-      if (peer.type === 'user') {
-        if ((m.from === me.uid && m.to === peer.id) || (m.from === peer.id && m.to === me.uid)) {
+      if (peer.type === "user") {
+        if ((m.from===me.uid && m.to===peer.id) || (m.from===peer.id && m.to===me.uid)) {
           renderMessage(m);
         }
       } else {
@@ -239,64 +265,72 @@ function selectChat(peer) {
 }
 
 function renderMessage(m) {
-  const div = document.createElement('div');
-  div.className = 'message';
-  if (m.type === 'image') {
-    const img = document.createElement('img');
+  const div = document.createElement("div");
+  if (m.type === "image") {
+    const img = document.createElement("img");
     img.src = m.url;
     div.appendChild(img);
   } else {
-    div.textContent = `${m.fromName || ''}: ${m.text || ''}`;
+    div.textContent = (m.fromName||"") + ": " + (m.text||"");
   }
   chatBox.appendChild(div);
 }
 
 window.sendMessage = async () => {
   if (!selectedPeer) return;
-  const text = messageInput.value.trim();
-  if (!text) return;
-  await addDoc(collection(db, 'messages'), {
+  await addDoc(collection(db,"messages"), {
     from: me.uid,
     fromName: me.name,
     to: selectedPeer.id,
-    text,
+    text: messageInput.value,
     timestamp: Date.now()
   });
-  messageInput.value = '';
+  messageInput.value = "";
 };
 
-imageInput.addEventListener('change', e => {
+imageInput.onchange = e => {
   selectedFile = e.target.files[0];
-  if (!selectedFile) return;
   previewImg.src = URL.createObjectURL(selectedFile);
-  previewImg.style.display = 'block';
-});
+  previewImg.style.display = "block";
+};
 
 window.sendImage = async () => {
-  if (!selectedPeer || !selectedFile) return;
-  const r = ref(storage, `chat/${Date.now()}_${selectedFile.name}`);
+  const r = ref(storage, "img/"+Date.now()+"_"+selectedFile.name);
   await uploadBytes(r, selectedFile);
   const url = await getDownloadURL(r);
-  await addDoc(collection(db, 'messages'), {
+  await addDoc(collection(db,"messages"), {
     from: me.uid,
     fromName: me.name,
     to: selectedPeer.id,
-    type: 'image',
+    type:"image",
     url,
-    timestamp: Date.now()
+    timestamp:Date.now()
   });
-  selectedFile = null;
-  previewImg.style.display = 'none';
-  imageInput.value = '';
+  previewImg.style.display="none";
+  imageInput.value="";
 };
+
+/* ================= CALLS ================= */
+function setupIncomingCalls() {
+  const q = query(collection(db,"groupCalls"), where("to","==",me.uid));
+  onSnapshot(q, snap => {
+    snap.forEach(d => {
+      const data = d.data();
+      if (!data.active) return;
+      popup.style.display="block";
+      popupCaller.textContent = "Anruf von "+data.from;
+    });
+  });
+}
 
 /* ================= PROFILE ================= */
 window.showProfile = () => {
-  alert(`Profil: ${me.name}`);
+  alert("Profil: " + me.name);
 };
 
 </script>
 </body>
 </html>
+
 
 
