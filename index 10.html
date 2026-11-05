@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebChat Deluxe V1.4.6.2</title>
+
+  <meta name="color-scheme" content="light dark">
+  <style>
+    /* ===== Design-Variablen (alles Farbige hängt hieran – wird im Design-Fenster verstellt) ===== */
+    :root {
+      --accent: #2563eb;
+      --accent-hover: #1f56cf;
+      --accent-contrast: #ffffff;
+      --accent-soft: rgba(37, 99, 235, 0.14);
+      --fs: 15px;
+      --radius: 10px;
+      --radius-sm: 7px;
+
+      /* Hell (Standard) */
+      --bg: #f4f5f7;
+      --surface: #ffffff;
+      --surface-2: #eff1f4;
+      --text: #1f2430;
+      --muted: #6b7280;
+      --border: #e1e4ea;
+      --bubble-in: #eceef2;
+      --bubble-in-text: #1f2430;
+      --danger: #c0392b;
+      --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 4px 16px rgba(16, 24, 40, .08);
+      color-scheme: light;
+    }
+    :root[data-theme="dark"] {
+      --bg: #0f1216;
+      --surface: #171a20;
+      --surface-2: #1f232b;
+      --text: #e7e9ee;
+      --muted: #9aa1ad;
+      --border: #2a2f39;
+      --bubble-in: #232832;
+      --bubble-in-text: #e7e9ee;
+      --danger: #f08a80;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .4);
+      color-scheme: dark;
+    }
+
+    /* ===== Grundlagen ===== */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%; width: 100%;
+      background: var(--bg); color: var(--text);
+      font: var(--fs)/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      overflow: hidden;
+    }
+    button, input, select { font: inherit; color: inherit; }
+
+    button {
+      border: 1px solid transparent; border-radius: var(--radius-sm);
+      padding: 9px 14px; background: var(--accent); color: var(--accent-contrast);
+      font-weight: 600; cursor: pointer; transition: background .15s, border-color .15s;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { opacity: .55; cursor: default; }
+    button.secondary { background: transparent; color: var(--text); border-color: var(--border); font-weight: 500; }
+    button.secondary:hover { background: var(--surface-2); }
+
+    input, select {
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 9px 11px; width: 100%;
+    }
+    input::placeholder { color: var(--muted); }
+    input:focus, select:focus { border-color: var(--accent); }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    input[type=color] { width: 44px; height: 34px; padding: 2px; cursor: pointer; }
+
+    .error-text { color: var(--danger); font-size: .9em; line-height: 1.4; }
+
+    /* ===== Layout ===== */
+    .container { display: flex; height: 100vh; height: 100dvh; width: 100vw; }
+
+    .sidebar {
+      width: 300px; padding: 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto;
+      background: var(--surface); border-right: 1px solid var(--border);
+    }
+    .sidebar h2 { font-size: 1.2em; font-weight: 700; }
+    .sidebar h2 small { color: var(--muted); font-weight: 500; font-size: .7em; }
+    .sidebar h4 { color: var(--muted); font-size: .78em; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+    .sidebar hr { border: none; border-top: 1px solid var(--border); }
+    .sidebar button { width: 100%; }
+    #authArea, #userArea { display: flex; flex-direction: column; gap: 10px; }
+    #userInfo { color: var(--muted); font-size: .9em; }
+    .push-bottom { margin-top: auto; }
+
+    #contacts div, #groups div { padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer; }
+    #contacts div:hover, #groups div:hover { background: var(--surface-2); }
+    #contacts div.selected, #groups div.selected { background: var(--accent-soft); font-weight: 600; }
+    #contacts div.empty, #groups div.empty { cursor: default; color: var(--muted); font-size: .85em; background: none; }
+
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+    .chat-header {
+      display: flex; justify-content: space-between; align-items: center; padding: 14px 18px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+    }
+    .chat-header h3 { font-size: 1.1em; font-weight: 600; }
+
+    .chat-box { flex: 1; padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .message {
+      padding: 9px 13px; border-radius: var(--radius); max-width: min(70%, 520px); overflow-wrap: anywhere;
+      background: var(--bubble-in); color: var(--bubble-in-text);
+    }
+    .message.sent { align-self: flex-end; background: var(--accent); color: var(--accent-contrast); }
+    .message.received { align-self: flex-start; }
+    .message img { max-width: 100%; border-radius: var(--radius-sm); display: block; }
+
+    .input-row {
+      display: flex; align-items: center; gap: 8px; padding: 12px 14px;
+      background: var(--surface); border-top: 1px solid var(--border);
+    }
+    .input-row input[type=text] { flex: 1; min-width: 0; }
+    .input-row input[type=file] { width: auto; max-width: 190px; padding: 6px; }
+    .input-row button { flex-shrink: 0; }
+    #previewImg { max-height: 120px; align-self: flex-start; margin: 8px 14px; border-radius: var(--radius-sm); }
+
+    #incomingPopup {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 50;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 18px; text-align: center;
+    }
+    #incomingPopup button { margin: 10px 4px 0; }
+
+    /* ===== Anrufe ===== */
+    #callButtons { display: flex; gap: 8px; }
+    button.danger { background: #dc2626; color: #fff; }
+    button.danger:hover { background: #b91c1c; }
+    #incomingPopup p { font-weight: 600; }
+
+    .call-overlay {
+      position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column;
+      background: #0d0f13; color: #f1f3f6;
+    }
+    .call-overlay[hidden] { display: none; }
+    .call-top { display: flex; justify-content: space-between; gap: 12px; padding: 14px 18px; }
+    #callTitle { font-weight: 600; }
+    #callStatus { color: #9aa1ad; font-size: .9em; }
+    .video-grid {
+      flex: 1; min-height: 0; padding: 10px; display: grid; gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); grid-auto-rows: 1fr;
+    }
+    .tile {
+      position: relative; min-height: 0; overflow: hidden; display: flex; align-items: center; justify-content: center;
+      background: #1a1d24; border-radius: var(--radius);
+    }
+    .tile video { width: 100%; height: 100%; object-fit: cover; }
+    .tile.self video { transform: scaleX(-1); }
+    .tile:not(.hasvideo) video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .tile .avatar {
+      width: 72px; height: 72px; border-radius: 50%; font-size: 30px; font-weight: 600;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--accent); color: var(--accent-contrast);
+    }
+    .tile.hasvideo .avatar { display: none; }
+    .tile .tile-name {
+      position: absolute; left: 10px; bottom: 8px; padding: 2px 8px; border-radius: 6px;
+      background: rgba(0, 0, 0, .55); color: #fff; font-size: .85em;
+    }
+    .call-controls { display: flex; justify-content: center; gap: 10px; padding: 14px; }
+    .call-controls button.secondary { color: #f1f3f6; border-color: #3a3f4a; }
+    .call-controls button.secondary:hover { background: #1f232b; }
+
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 200;
+      max-width: min(92vw, 460px); padding: 10px 16px; border-radius: var(--radius);
+      background: var(--text); color: var(--bg); box-shadow: var(--shadow); text-align: center;
+    }
+    .toast[hidden] { display: none; }
+
+    input[type=checkbox] { width: auto; }
+    .members-list { display: flex; flex-direction: column; gap: 8px; max-height: 260px; overflow: auto; }
+    .member { display: flex; align-items: center; gap: 10px; color: var(--text); }
+
+    /* ===== Design-Fenster ===== */
+    .overlay {
+      position: fixed; inset: 0; z-index: 100; padding: 16px;
+      display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .4);
+    }
+    .overlay[hidden] { display: none; }
+    .panel {
+      width: min(380px, 100%); max-height: 100%; overflow: auto; padding: 20px;
+      display: flex; flex-direction: column; gap: 16px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+    }
+    .panel h3 { font-size: 1.1em; }
+    .field { display: flex; flex-direction: column; gap: 6px; font-size: .9em; color: var(--muted); font-weight: 500; }
+    .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .swatch, .swatch:hover {
+      width: 28px; height: 28px; padding: 0; border-radius: 50%; background: var(--c);
+      border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border);
+    }
+    .swatch.active { box-shadow: 0 0 0 2px var(--text); }
+    .panel .row { display: flex; justify-content: flex-end; gap: 8px; }
+
+    @media (max-width: 800px) {
+      .container { flex-direction: column; }
+      .sidebar { width: 100%; height: 45%; border-right: none; border-bottom: 1px solid var(--border); }
+      .main { height: 55%; }
+    }
+  </style>
+
+  <script>
+    /* ===== Design laden/anwenden – läuft vor dem ersten Zeichnen, damit nichts flackert ===== */
+    (function () {
+      var KEY = "webchat-style";
+      var DEFAULTS = { theme: "light", accent: "#2563eb", font: "md", radius: "md" };
+      var FONT = { sm: "13px", md: "15px", lg: "17px" };
+      var RADIUS = { sharp: ["3px", "2px"], md: ["10px", "7px"], round: ["18px", "12px"] };
+
+      function load() {
+        try {
+          var s = JSON.parse(localStorage.getItem(KEY) || "null");
+          if (s && typeof s === "object") return Object.assign({}, DEFAULTS, s);
+        } catch (e) {}
+        return Object.assign({}, DEFAULTS);
+      }
+      function save(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) {} }
+      function hexToRgb(hex) {
+        var m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+        if (!m) return null;
+        var n = parseInt(m[1], 16);
+        return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+      }
+      function toHex(r, g, b) {
+        return "#" + [r, g, b].map(function (v) {
+          return Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0");
+        }).join("");
+      }
+      function apply(s) {
+        var root = document.documentElement;
+        var dark = s.theme === "dark" ||
+          (s.theme === "auto" && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+        root.setAttribute("data-theme", dark ? "dark" : "light");
+
+        var rgb = hexToRgb(s.accent) || hexToRgb(DEFAULTS.accent);
+        var lum = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
+        root.style.setProperty("--accent", toHex(rgb[0], rgb[1], rgb[2]));
+        root.style.setProperty("--accent-hover", toHex(rgb[0] * 0.85, rgb[1] * 0.85, rgb[2] * 0.85));
+        root.style.setProperty("--accent-contrast", lum > 0.6 ? "#111827" : "#ffffff");
+        root.style.setProperty("--accent-soft", "rgba(" + rgb.join(",") + ", 0.16)");
+        root.style.setProperty("--fs", FONT[s.font] || FONT.md);
+        var r = RADIUS[s.radius] || RADIUS.md;
+        root.style.setProperty("--radius", r[0]);
+        root.style.setProperty("--radius-sm", r[1]);
+      }
+
+      window.WebChatStyle = { DEFAULTS: DEFAULTS, load: load, save: save, apply: apply };
+      apply(load());
+
+      // "Wie Gerät": bei Wechsel des System-Designs mitziehen
+      if (window.matchMedia) {
+        var mq = matchMedia("(prefers-color-scheme: dark)");
+        var onChange = function () { var s = load(); if (s.theme === "auto") apply(s); };
+        if (mq.addEventListener) mq.addEventListener("change", onChange);
+      }
+    })();
+  </script>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <h2>WebChat Deluxe <small>1.4.6.2</small></h2>
+
+    <!-- AUTH -->
+    <div id="authArea">
+      <input id="email" type="email" placeholder="E-Mail" autocomplete="username">
+      <input id="password" type="password" placeholder="Passwort" autocomplete="current-password">
+      <button id="signupBtn" onclick="signup()">Registrieren</button>
+      <button id="loginBtn" onclick="login()">Anmelden</button>
+      <div id="authError" role="alert" class="error-text" style="display:none"></div>
+    </div>
+
+    <!-- USER -->
+    <div id="userArea" style="display:none">
+      <div id="userInfo"></div>
+      <div id="appStatus" role="alert" class="error-text" style="display:none"></div>
+
+      <button onclick="logout()">Abmelden</button>
+      <button onclick="showProfile()">Profil</button>
+
+      <hr>
+
+      <h4>Kontakte</h4>
+      <div id="contacts"></div>
+
+      <hr>
+
+      <h4>Gruppen</h4>
+      <div id="groups"></div>
+
+      <input id="newGroupName" placeholder="Gruppenname">
+      <button onclick="createGroup()">Gruppe erstellen</button>
+    </div>
+
+    <button type="button" id="openSettings" class="secondary push-bottom">Design anpassen</button>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="chat-header">
+      <h3 id="chatTitle">Bitte anmelden</h3>
+      <div id="callButtons" style="display:none">
+        <button id="membersBtn" class="secondary" style="display:none" title="Mitglieder der Gruppe verwalten">👥 Mitglieder</button>
+        <button id="audioCallBtn" class="secondary" title="Sprachanruf">📞 Anruf</button>
+        <button id="videoCallBtn" class="secondary" title="Videoanruf">🎥 Video</button>
+      </div>
+    </div>
+
+    <div id="chatBox" class="chat-box"></div>
+
+    <div class="input-row">
+      <input id="messageInput" type="text" placeholder="Nachricht" autocomplete="off">
+      <input id="imageInput" type="file" accept="image/*">
+      <button onclick="sendMessage()">Senden</button>
+      <button onclick="sendImage()">Bild</button>
+    </div>
+
+    <img id="previewImg" style="display:none">
+  </div>
+
+</div>
+
+<!-- INCOMING CALL -->
+<div id="incomingPopup" style="display:none">
+  <p id="popupCaller"></p>
+  <button id="acceptCallBtn">Annehmen</button>
+  <button id="declineCallBtn" class="secondary">Ablehnen</button>
+</div>
+
+<!-- LAUFENDER ANRUF -->
+<div id="callOverlay" class="call-overlay" hidden>
+  <div class="call-top">
+    <span id="callTitle"></span>
+    <span id="callStatus"></span>
+  </div>
+  <div id="videoGrid" class="video-grid"></div>
+  <div class="call-controls">
+    <button type="button" id="muteBtn" class="secondary">Mikro aus</button>
+    <button type="button" id="camBtn" class="secondary">Kamera aus</button>
+    <button type="button" id="hangupBtn" class="danger">Auflegen</button>
+  </div>
+</div>
+
+<!-- GRUPPEN-MITGLIEDER -->
+<div id="membersOverlay" class="overlay" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="membersTitle">
+    <h3 id="membersTitle">Mitglieder hinzufügen</h3>
+    <div id="membersList" class="members-list"></div>
+    <div class="row">
+      <button type="button" id="membersCancel" class="secondary">Abbrechen</button>
+      <button type="button" id="membersSave">Hinzufügen</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" hidden></div>
+
+<!-- DESIGN-FENSTER -->
+<div id="settingsOverlay" class="overlay" hidden>
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <h3 id="settingsTitle">Design anpassen</h3>
+
+    <label class="field">Modus
+      <select id="setTheme">
+        <option value="light">Hell</option>
+        <option value="dark">Dunkel</option>
+        <option value="auto">Wie mein Gerät</option>
+      </select>
+    </label>
+
+    <div class="field">Akzentfarbe
+      <div class="swatches" id="swatches">
+        <input id="setAccent" type="color" value="#2563eb" aria-label="Eigene Farbe wählen" title="Eigene Farbe">
+      </div>
+    </div>
+
+    <label class="field">Schriftgröße
+      <select id="setFont">
+        <option value="sm">Klein</option>
+        <option value="md">Normal</option>
+        <option value="lg">Groß</option>
+      </select>
+    </label>
+
+    <label class="field">Ecken
+      <select id="setRadius">
+        <option value="sharp">Eckig</option>
+        <option value="md">Normal</option>
+        <option value="round">Rund</option>
+      </select>
+    </label>
+
+    <div class="row">
+      <button type="button" id="resetStyle" class="secondary">Zurücksetzen</button>
+      <button type="button" id="closeSettings">Fertig</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* Läuft unabhängig von Firebase – das Design lässt sich also immer einstellen. */
+  (function () {
+    var S = window.WebChatStyle;
+    var state = S.load();
+    var overlay = document.getElementById("settingsOverlay");
+    var setTheme = document.getElementById("setTheme");
+    var setFont = document.getElementById("setFont");
+    var setRadius = document.getElementById("setRadius");
+    var setAccent = document.getElementById("setAccent");
+    var swatchBox = document.getElementById("swatches");
+    var PRESETS = [
+      ["Blau", "#2563eb"], ["Grün", "#16a34a"], ["Violett", "#7c3aed"],
+      ["Orange", "#ea580c"], ["Rot", "#dc2626"], ["Grau", "#475569"]
+    ];
+
+    var swatchEls = PRESETS.map(function (p) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "swatch";
+      b.title = p[0];
+      b.setAttribute("aria-label", p[0]);
+      b.style.setProperty("--c", p[1]);
+      b.onclick = function () { change({ accent: p[1] }); };
+      swatchBox.insertBefore(b, setAccent);
+      return { el: b, color: p[1] };
+    });
+
+    function sync() {
+      setTheme.value = state.theme;
+      setFont.value = state.font;
+      setRadius.value = state.radius;
+      setAccent.value = state.accent;
+      swatchEls.forEach(function (s) {
+        s.el.classList.toggle("active", s.color.toLowerCase() === String(state.accent).toLowerCase());
+      });
+    }
+    function change(patch) {
+      state = Object.assign({}, state, patch);
+      S.apply(state);
+      S.save(state);
+      sync();
+    }
+
+    setTheme.onchange = function () { change({ theme: setTheme.value }); };
+    setFont.onchange = function () { change({ font: setFont.value }); };
+    setRadius.onchange = function () { change({ radius: setRadius.value }); };
+    setAccent.oninput = function () { change({ accent: setAccent.value }); };
+    document.getElementById("resetStyle").onclick = function () { change(Object.assign({}, S.DEFAULTS)); };
+
+    function open() { sync(); overlay.hidden = false; }
+    function close() { overlay.hidden = true; }
+    document.getElementById("openSettings").onclick = open;
+    document.getElementById("closeSettings").onclick = close;
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !overlay.hidden) close(); });
+  })();
+</script>
+
+<script>
+  // Fallback: wird vom Firebase-Modul unten überschrieben, sobald es geladen ist.
+  // Greift nur, wenn das Modul NICHT lädt (offline, Adblocker, Google-Server blockiert ...).
+  window.login = window.signup = function () {
+    var el = document.getElementById("authError");
+    el.textContent = "Firebase konnte nicht geladen werden (keine Verbindung, Adblocker oder blockierte Google-Server?). Seite neu laden und ggf. mit F12 die Konsole prüfen.";
+    el.style.display = "block";
+  };
+</script>
+
+<script type="module">
+
+/* ================= FIREBASE IMPORTS ================= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
+import {
+  getAuth,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
+  deleteDoc
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-storage.js";
+
+/* ================= FIREBASE CONFIG ================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyCFgiS9au7GOzhJ7_ayBcBM3bZrEm5GJOA",
+  authDomain: "webchat-a47cc.firebaseapp.com",
+  projectId: "webchat-a47cc",
+  storageBucket: "webchat-a47cc.appspot.com",
+  appId: "1:318380716143:web:da7474bfa392dfeaccdd9a"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
+
+/* ================= STATE ================= */
+let me = null;
+let selectedPeer = null;
+let selectedFile = null;
+let messagesUnsub = null;
+let call = null;       // laufender Anruf
+let incoming = null;   // eingehende Einladung (Klingeln)
+let ringAudio = null;
+
+/* ================= UI ================= */
+const authArea = document.getElementById("authArea");
+const userArea = document.getElementById("userArea");
+const userInfo = document.getElementById("userInfo");
+const contactsDiv = document.getElementById("contacts");
+const groupsDiv = document.getElementById("groups");
+const chatBox = document.getElementById("chatBox");
+const chatTitle = document.getElementById("chatTitle");
+const messageInput = document.getElementById("messageInput");
+const imageInput = document.getElementById("imageInput");
+const previewImg = document.getElementById("previewImg");
+const callButtons = document.getElementById("callButtons");
+const audioCallBtn = document.getElementById("audioCallBtn");
+const videoCallBtn = document.getElementById("videoCallBtn");
+const membersBtn = document.getElementById("membersBtn");
+const callOverlay = document.getElementById("callOverlay");
+const callTitle = document.getElementById("callTitle");
+const callStatus = document.getElementById("callStatus");
+const videoGrid = document.getElementById("videoGrid");
+const muteBtn = document.getElementById("muteBtn");
+const camBtn = document.getElementById("camBtn");
+const hangupBtn = document.getElementById("hangupBtn");
+const membersOverlay = document.getElementById("membersOverlay");
+const membersList = document.getElementById("membersList");
+const membersSave = document.getElementById("membersSave");
+const membersCancel = document.getElementById("membersCancel");
+const toastEl = document.getElementById("toast");
+const popup = document.getElementById("incomingPopup");
+const popupCaller = document.getElementById("popupCaller");
+const acceptBtn = document.getElementById("acceptCallBtn");
+const declineBtn = document.getElementById("declineCallBtn");
+
+/* ================= AUTH ================= */
+const authError = document.getElementById("authError");
+const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
+const loginBtn = document.getElementById("loginBtn");
+const signupBtn = document.getElementById("signupBtn");
+
+function showAuthError(msg) {
+  authError.textContent = msg || "";
+  authError.style.display = msg ? "block" : "none";
+}
+
+function setAuthBusy(busy) {
+  loginBtn.disabled = busy;
+  signupBtn.disabled = busy;
+}
+
+function authMessage(e) {
+  switch (e.code) {
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "E-Mail oder Passwort stimmt nicht. Noch kein Konto? Dann zuerst auf „Registrieren“ klicken.";
+    case "auth/invalid-email":
+      return "Die E-Mail-Adresse ist ungültig.";
+    case "auth/missing-password":
+      return "Bitte ein Passwort eingeben.";
+    case "auth/email-already-in-use":
+      return "Diese E-Mail ist schon registriert – klick auf „Anmelden“.";
+    case "auth/weak-password":
+      return "Das Passwort ist zu schwach (mindestens 6 Zeichen).";
+    case "auth/user-disabled":
+      return "Dieses Konto wurde deaktiviert.";
+    case "auth/too-many-requests":
+      return "Zu viele Versuche. Bitte kurz warten und es dann erneut probieren.";
+    case "auth/network-request-failed":
+      return "Netzwerkfehler. Internetverbindung prüfen (oder blockiert ein Adblocker Google-Server?).";
+    case "auth/operation-not-allowed":
+      return "E-Mail/Passwort-Anmeldung ist im Firebase-Projekt nicht aktiviert (Firebase Console → Authentication → Sign-in method).";
+    case "auth/operation-not-supported-in-this-environment":
+      return "Die Seite muss über http(s) geöffnet werden (nicht als Datei) und der Browser-Speicher muss erlaubt sein.";
+    default:
+      return (e.code || "Fehler") + " | " + (e.message || e);
+  }
+}
+
+async function doAuth(action) {
+  const email = emailInput.value.trim();
+  const pw = passwordInput.value;
+  if (!email || !pw) {
+    showAuthError("Bitte E-Mail und Passwort eingeben.");
+    return;
+  }
+  showAuthError("");
+  setAuthBusy(true);
+  try {
+    await action(auth, email, pw);
+  } catch (e) {
+    console.error(e);
+    showAuthError(authMessage(e));
+  } finally {
+    setAuthBusy(false);
+  }
+}
+
+window.signup = () => doAuth(createUserWithEmailAndPassword);
+window.login = () => doAuth(signInWithEmailAndPassword);
+window.logout = async () => {
+  await leaveCall("");
+  await signOut(auth);
+};
+
+[emailInput, passwordInput].forEach(input =>
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") window.login();
+  })
+);
+
+/* ================= AUTH STATE ================= */
+let callsUnsub = null;
+
+/* ===== Statuszeile für Datenbank-Fehler (sichtbar statt nur in der Konsole) ===== */
+const appStatus = document.getElementById("appStatus");
+
+function setStatus(msg) {
+  appStatus.textContent = msg || "";
+  appStatus.style.display = msg ? "block" : "none";
+}
+
+function dbErrorText(e, what) {
+  const code = (e && e.code) || "";
+  if (code === "permission-denied")
+    return what + ": Firestore verweigert den Zugriff – die Sicherheitsregeln in der Firebase Console müssen angepasst werden.";
+  if (code === "storage/unauthorized")
+    return what + ": Storage verweigert den Zugriff – die Storage-Regeln in der Firebase Console müssen angepasst werden.";
+  if (code === "failed-precondition" && /index/i.test(e.message || ""))
+    return what + ": Firestore braucht dafür einen Index (Link dazu steht in der Browser-Konsole, F12).";
+  return what + ": " + (code || (e && e.message) || e);
+}
+
+function reportError(what, e) {
+  console.error(what, e);
+  setStatus(dbErrorText(e, what));
+}
+
+onAuthStateChanged(auth, async user => {
+  if (!user) {
+    me = null;
+    selectedPeer = null;
+    if (messagesUnsub) { messagesUnsub(); messagesUnsub = null; }
+    if (callsUnsub) { callsUnsub(); callsUnsub = null; }
+    if (call) leaveCall("", false);
+    clearIncoming();
+    callButtons.style.display = "none";
+    authArea.style.display = "";
+    userArea.style.display = "none";
+    chatTitle.textContent = "Bitte anmelden";
+    chatBox.innerHTML = "";
+    setStatus("");
+    return;
+  }
+
+  me = {
+    uid: user.uid,
+    name: (user.email || "User").split("@")[0]
+  };
+
+  // Oberfläche sofort umschalten – unabhängig davon, ob Firestore antwortet.
+  authArea.style.display = "none";
+  userArea.style.display = "";
+  userInfo.textContent = "Angemeldet als " + me.name;
+  chatTitle.textContent = "Wähle einen Chat";
+  showAuthError("");
+
+  try {
+    await setDoc(doc(db, "users", me.uid), me, { merge: true });
+  } catch (e) {
+    reportError("Profil speichern", e);
+  }
+
+  if (!me || me.uid !== user.uid) return; // währenddessen abgemeldet
+
+  loadContacts();
+  loadGroups();
+  setupIncomingCalls();
+});
+
+/* ================= CONTACTS ================= */
+function emptyHint(container, text) {
+  const div = document.createElement("div");
+  div.className = "empty";
+  div.textContent = text;
+  container.appendChild(div);
+}
+
+async function loadContacts() {
+  contactsDiv.innerHTML = "";
+  if (!me) return;
+  const myUid = me.uid;
+  try {
+    const snap = await getDocs(collection(db, "users"));
+    let count = 0;
+    snap.forEach(d => {
+      if (d.id === myUid) return;
+      count++;
+      const data = d.data();
+      const name = data.name || data.email || "User";
+      const div = document.createElement("div");
+      div.textContent = name;
+      div.onclick = () => selectChat({ type: "user", id: d.id, name }, div);
+      if (selectedPeer && selectedPeer.type === "user" && selectedPeer.id === d.id) {
+        div.classList.add("selected");
+        selectedEl = div;
+      }
+      contactsDiv.appendChild(div);
+    });
+    if (!count) emptyHint(contactsDiv, "Noch keine anderen Nutzer. Sobald sich jemand anmeldet, erscheint er hier.");
+  } catch (e) {
+    reportError("Kontakte laden", e);
+  }
+}
+
+/* ================= GROUPS ================= */
+async function loadGroups() {
+  groupsDiv.innerHTML = "";
+  if (!me) return;
+  try {
+    const q = query(collection(db, "groups"), where("members", "array-contains", me.uid));
+    const snap = await getDocs(q);
+    let count = 0;
+    snap.forEach(d => {
+      count++;
+      const name = d.data().name || "Gruppe";
+      const div = document.createElement("div");
+      div.textContent = name;
+      div.onclick = () => selectChat({ type: "group", id: d.id, name }, div);
+      if (selectedPeer && selectedPeer.type === "group" && selectedPeer.id === d.id) {
+        div.classList.add("selected");
+        selectedEl = div;
+      }
+      groupsDiv.appendChild(div);
+    });
+    if (!count) emptyHint(groupsDiv, "Noch keine Gruppen.");
+  } catch (e) {
+    reportError("Gruppen laden", e);
+  }
+}
+
+window.createGroup = async () => {
+  if (!me) return;
+  const input = document.getElementById("newGroupName");
+  const name = input.value.trim();
+  if (!name) { setStatus("Bitte einen Gruppennamen eingeben."); return; }
+  setStatus("");
+  try {
+    await addDoc(collection(db, "groups"), {
+      name,
+      members: [me.uid],
+      created: Date.now()
+    });
+    input.value = "";
+    await loadGroups();
+  } catch (e) {
+    reportError("Gruppe erstellen", e);
+  }
+};
+
+/* ================= CHAT ================= */
+let selectedEl = null;
+
+function selectChat(peer, el) {
+  selectedPeer = peer;
+  callButtons.style.display = "flex";
+  membersBtn.style.display = peer.type === "group" ? "" : "none";
+  chatTitle.textContent = peer.name;
+  chatBox.innerHTML = "";
+  setStatus("");
+
+  if (selectedEl) selectedEl.classList.remove("selected");
+  selectedEl = el || null;
+  if (selectedEl) selectedEl.classList.add("selected");
+
+  if (messagesUnsub) { messagesUnsub(); messagesUnsub = null; }
+
+  // Kein "alle Nachrichten laden und filtern" mehr: nur die Nachrichten dieses Chats abfragen.
+  // Ohne orderBy (kein Spezial-Index nötig) – sortiert wird hier im Browser.
+  const results = [];
+  const render = () => {
+    chatBox.innerHTML = "";
+    results.flat()
+      .filter(m => m && !m.typing)
+      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+      .forEach(renderMessage);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  };
+  const listen = (i, q) => onSnapshot(q, snap => {
+    results[i] = snap.docs.map(d => d.data());
+    render();
+  }, e => reportError("Nachrichten laden", e));
+
+  const msgs = collection(db, "messages");
+  const unsubs = peer.type === "group"
+    ? [listen(0, query(msgs, where("to", "==", peer.id)))]
+    : [
+        listen(0, query(msgs, where("from", "==", me.uid), where("to", "==", peer.id))),
+        listen(1, query(msgs, where("from", "==", peer.id), where("to", "==", me.uid)))
+      ];
+  messagesUnsub = () => unsubs.forEach(u => u());
+}
+
+function renderMessage(m) {
+  const div = document.createElement("div");
+  div.className = "message " + (m.from === me.uid ? "sent" : "received");
+  if (m.type === "image") {
+    const img = document.createElement("img");
+    img.src = m.url;
+    div.appendChild(img);
+  } else {
+    div.textContent = (m.fromName ? m.fromName + ": " : "") + (m.text || "");
+  }
+  chatBox.appendChild(div);
+}
+
+window.sendMessage = async () => {
+  if (!me) return;
+  if (!selectedPeer) { setStatus("Wähle zuerst links einen Kontakt oder eine Gruppe aus."); return; }
+  const text = messageInput.value.trim();
+  if (!text) return;
+  setStatus("");
+  try {
+    await addDoc(collection(db, "messages"), {
+      from: me.uid,
+      fromName: me.name,
+      to: selectedPeer.id,
+      type: "text",
+      text,
+      timestamp: Date.now()
+    });
+    messageInput.value = "";
+  } catch (e) {
+    reportError("Nachricht senden", e);
+  }
+};
+
+messageInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") window.sendMessage();
+});
+
+imageInput.onchange = e => {
+  selectedFile = e.target.files[0] || null;
+  if (selectedFile) {
+    previewImg.src = URL.createObjectURL(selectedFile);
+    previewImg.style.display = "block";
+  } else {
+    previewImg.style.display = "none";
+  }
+};
+
+window.sendImage = async () => {
+  if (!me) return;
+  if (!selectedPeer) { setStatus("Wähle zuerst links einen Kontakt oder eine Gruppe aus."); return; }
+  if (!selectedFile) { setStatus("Wähle zuerst ein Bild aus (Dateiauswahl neben dem Nachrichtenfeld)."); return; }
+  setStatus("Bild wird hochgeladen …");
+  try {
+    const clean = selectedFile.name.replace(/[^\w.-]/g, "_");
+    const r = ref(storage, "img/" + Date.now() + "_" + clean);
+    await uploadBytes(r, selectedFile);
+    const url = await getDownloadURL(r);
+    await addDoc(collection(db, "messages"), {
+      from: me.uid,
+      fromName: me.name,
+      to: selectedPeer.id,
+      type: "image",
+      url,
+      timestamp: Date.now()
+    });
+    selectedFile = null;
+    imageInput.value = "";
+    previewImg.style.display = "none";
+    setStatus("");
+  } catch (e) {
+    reportError("Bild senden", e);
+  }
+};
+
+/* ================= CALLS ================= */
+// Signalisierung läuft über Firestore (calls / calls/{id}/signals / invites),
+// die Audio-/Videodaten gehen direkt zwischen den Geräten (WebRTC).
+const ICE_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" }
+];
+const RING_TIMEOUT_MS = 45000;
+const RINGTONE = "phone-calling-1b.mp3";
+
+let toastTimer = null;
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.hidden = true; }, 4500);
+}
+
+/* --- Klingelton --- */
+function startRing(volume) {
+  stopRing();
+  try {
+    ringAudio = new Audio(RINGTONE);
+    ringAudio.loop = true;
+    ringAudio.volume = volume;
+    const p = ringAudio.play();
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) { /* Ton ist optional */ }
+}
+function stopRing() {
+  if (ringAudio) { try { ringAudio.pause(); } catch (e) {} ringAudio = null; }
+}
+
+/* --- Mikrofon / Kamera --- */
+function mediaErrorText(e) {
+  switch (e && e.name) {
+    case "NoMediaDevices":
+      return "Mikrofon/Kamera gehen nur auf https-Seiten (oder localhost).";
+    case "NotAllowedError":
+    case "SecurityError":
+      return "Zugriff auf Mikrofon/Kamera ist blockiert – bitte in der Adressleiste erlauben.";
+    case "NotFoundError":
+      return "Kein Mikrofon bzw. keine Kamera gefunden.";
+    case "NotReadableError":
+      return "Mikrofon/Kamera wird gerade von einer anderen App benutzt.";
+    default:
+      return "Mikrofon/Kamera konnten nicht gestartet werden (" + ((e && e.name) || e) + ").";
+  }
+}
+
+async function getMedia(type) {
+  const md = navigator.mediaDevices;
+  if (!md || !md.getUserMedia) {
+    const err = new Error("mediaDevices fehlt");
+    err.name = "NoMediaDevices";
+    throw err;
+  }
+  try {
+    return await md.getUserMedia({ audio: true, video: type === "video" });
+  } catch (e) {
+    if (type === "video" && (e.name === "NotFoundError" || e.name === "OverconstrainedError")) {
+      showToast("Keine Kamera gefunden – du bist nur mit Ton dabei.");
+      return md.getUserMedia({ audio: true, video: false });
+    }
+    throw e;
+  }
+}
+
+/* --- Anruf starten --- */
+async function startCall(type) {
+  if (!me || !selectedPeer) return;
+  if (call || incoming) { showToast("Du bist schon in einem Anruf."); return; }
+  const peer = selectedPeer;
+  let stream = null;
+  let callRef = null;
+  try {
+    let invited;
+    if (peer.type === "group") {
+      const g = await getDoc(doc(db, "groups", peer.id));
+      invited = ((g.data() || {}).members || []).filter(u => u !== me.uid);
+      if (!invited.length) {
+        showToast("In dieser Gruppe ist niemand außer dir – füge erst Mitglieder hinzu.");
+        return;
+      }
+    } else {
+      invited = [peer.id];
+    }
+
+    try {
+      stream = await getMedia(type);
+    } catch (e) {
+      showToast(mediaErrorText(e));
+      return;
+    }
+
+    const data = {
+      type, from: me.uid, fromName: me.name,
+      chatType: peer.type, chatName: peer.name,
+      invited, participants: [me.uid], declined: [],
+      names: { [me.uid]: me.name },
+      active: true, created: Date.now()
+    };
+    callRef = await addDoc(collection(db, "calls"), data);
+    const inviteRefs = await Promise.all(invited.map(u =>
+      addDoc(collection(db, "invites"), {
+        to: u, from: me.uid, fromName: me.name,
+        callId: callRef.id, callType: type,
+        chatType: peer.type, chatName: peer.name,
+        created: Date.now()
+      })
+    ));
+    beginSession(callRef.id, data, stream, true, inviteRefs);
+  } catch (e) {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (callRef) updateDoc(callRef, { active: false }).catch(() => {});
+    reportError("Anruf starten", e);
+  }
+}
+
+/* --- Sitzung (laufender Anruf) --- */
+function beginSession(callId, d, stream, isCaller, inviteRefs) {
+  const c = {
+    id: callId, uid: me.uid, type: d.type, isCaller, stream,
+    isGroup: d.chatType === "group",
+    invited: d.invited || [], inviteRefs: inviteRefs || [],
+    names: d.names || {}, pcs: {}, queue: {}, tiles: {}, seen: new Set(), failed: new Set(),
+    unsubs: [], seenPeer: false, ended: false, muted: false, camOff: false, ringTimer: null
+  };
+  call = c;
+  stopRing();
+
+  callTitle.textContent = c.isGroup ? (d.chatName || "Gruppenanruf") : (isCaller ? d.chatName : d.fromName);
+  callStatus.textContent = isCaller ? "Klingelt …" : "Verbinde …";
+  muteBtn.textContent = "Mikro aus";
+  camBtn.textContent = "Kamera aus";
+  camBtn.style.display = stream.getVideoTracks().length ? "" : "none";
+  audioCallBtn.disabled = true;
+  videoCallBtn.disabled = true;
+  callOverlay.hidden = false;
+
+  const self = ensureTile(c, c.uid);
+  self.video.srcObject = stream;
+  if (stream.getVideoTracks().length) self.tile.classList.add("hasvideo");
+  playVideo(self.video);
+
+  if (isCaller) {
+    startRing(0.4);
+    c.ringTimer = setTimeout(() => {
+      if (call === c && !c.seenPeer) leaveCall("Keine Antwort.");
+    }, RING_TIMEOUT_MS);
+  }
+
+  c.unsubs.push(onSnapshot(doc(db, "calls", callId),
+    snap => onCallDoc(c, snap),
+    e => reportError("Anruf", e)));
+
+  const sq = query(collection(db, "calls", callId, "signals"), where("to", "==", c.uid));
+  c.unsubs.push(onSnapshot(sq, snap => {
+    snap.docChanges()
+      .filter(ch => ch.type === "added")
+      .map(ch => ch.doc.data())
+      .sort((a, b) => (a.created || 0) - (b.created || 0))
+      .forEach(sig => handleSignal(c, sig));
+  }, e => reportError("Anruf-Signale", e)));
+}
+
+function onCallDoc(c, snap) {
+  if (call !== c || c.ended) return;
+  if (!snap.exists()) { leaveCall("Anruf beendet."); return; }
+  const d = snap.data();
+  if (d.active === false) { leaveCall(c.seenPeer ? "Gespräch beendet." : "Anruf beendet."); return; }
+
+  c.names = d.names || {};
+  const others = (d.participants || []).filter(u => u !== c.uid);
+
+  if (others.length && !c.seenPeer) {
+    c.seenPeer = true;
+    clearTimeout(c.ringTimer);
+    stopRing();
+    callStatus.textContent = "Verbinde …";
+  }
+
+  others.forEach(uid => {
+    c.seen.add(uid);
+    ensureTile(c, uid);
+    setTileName(c, uid);
+    // Genau eine Seite pro Paar schickt das Angebot (die mit der größeren ID) – so gibt es keine Doppel-Angebote.
+    if (!c.pcs[uid] && !c.failed.has(uid) && c.uid > uid) {
+      connectTo(c, uid, true).catch(e => console.error("Verbindung aufbauen:", e));
+    }
+  });
+
+  // Teilnehmer, die vorher da waren und jetzt weg sind
+  c.seen.forEach(uid => {
+    if (!others.includes(uid)) { removePeer(c, uid); c.seen.delete(uid); }
+  });
+
+  if (c.seenPeer && others.length === 0) {
+    leaveCall(c.isGroup ? "Alle anderen haben den Anruf verlassen." : "Gespräch beendet.");
+    return;
+  }
+  if (c.isCaller && !c.seenPeer && c.invited.length && (d.declined || []).length >= c.invited.length) {
+    leaveCall(c.isGroup ? "Niemand hat den Anruf angenommen." : "Anruf abgelehnt.");
+  }
+}
+
+/* --- Kacheln --- */
+function ensureTile(c, uid) {
+  if (c.tiles[uid]) return c.tiles[uid];
+  const tile = document.createElement("div");
+  tile.className = "tile";
+  const video = document.createElement("video");
+  video.autoplay = true;
+  video.playsInline = true;
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  const label = document.createElement("div");
+  label.className = "tile-name";
+  tile.appendChild(video);
+  tile.appendChild(avatar);
+  tile.appendChild(label);
+  if (uid === c.uid) { tile.classList.add("self"); video.muted = true; }
+  videoGrid.appendChild(tile);
+  const t = { tile, video, avatar, label };
+  c.tiles[uid] = t;
+  setTileName(c, uid);
+  return t;
+}
+
+function setTileName(c, uid) {
+  const t = c.tiles[uid];
+  if (!t) return;
+  const name = uid === c.uid ? "Du" : (c.names[uid] || "Teilnehmer");
+  t.label.textContent = name;
+  t.avatar.textContent = (name[0] || "?").toUpperCase();
+}
+
+function playVideo(v) {
+  try {
+    const p = v.play && v.play();
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) {}
+}
+
+/* --- Verbindungen --- */
+async function sendSignal(c, to, kind, payload) {
+  try {
+    await addDoc(collection(db, "calls", c.id, "signals"), {
+      from: c.uid, to, kind, data: JSON.stringify(payload), created: Date.now()
+    });
+  } catch (e) {
+    console.error("Signal senden:", e);
+  }
+}
+
+async function connectTo(c, uid, initiator) {
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  c.pcs[uid] = pc;                         // sofort eintragen (vor jedem await)
+  c.queue[uid] = c.queue[uid] || [];
+  c.stream.getTracks().forEach(t => pc.addTrack(t, c.stream));
+
+  pc.onicecandidate = e => {
+    if (e.candidate) sendSignal(c, uid, "candidate", e.candidate.toJSON ? e.candidate.toJSON() : e.candidate);
+  };
+  pc.ontrack = e => {
+    const t = ensureTile(c, uid);
+    if (e.streams && e.streams[0]) t.video.srcObject = e.streams[0];
+    if (e.track && e.track.kind === "video") t.tile.classList.add("hasvideo");
+    playVideo(t.video);
+  };
+  pc.onconnectionstatechange = () => onPeerState(c, uid, pc);
+
+  if (initiator) {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await sendSignal(c, uid, "offer", { type: offer.type, sdp: offer.sdp });
+  }
+  return pc;
+}
+
+async function flushQueue(c, uid) {
+  const pc = c.pcs[uid];
+  const list = c.queue[uid] || [];
+  c.queue[uid] = [];
+  for (const cand of list) {
+    try { await pc.addIceCandidate(cand); } catch (e) { console.warn("ICE:", e); }
+  }
+}
+
+async function handleSignal(c, sig) {
+  if (call !== c || c.ended) return;
+  const uid = sig.from;
+  let data;
+  try { data = JSON.parse(sig.data); } catch (e) { return; }
+  try {
+    if (sig.kind === "offer") {
+      if (c.pcs[uid]) removePeer(c, uid, true);
+      const pc = await connectTo(c, uid, false);
+      await pc.setRemoteDescription(data);
+      await flushQueue(c, uid);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await sendSignal(c, uid, "answer", { type: answer.type, sdp: answer.sdp });
+    } else if (sig.kind === "answer") {
+      const pc = c.pcs[uid];
+      if (!pc) return;
+      await pc.setRemoteDescription(data);
+      await flushQueue(c, uid);
+    } else if (sig.kind === "candidate") {
+      const pc = c.pcs[uid];
+      if (!pc || !pc.remoteDescription) {
+        (c.queue[uid] = c.queue[uid] || []).push(data);   // erst merken, bis das Angebot/die Antwort da ist
+      } else {
+        await pc.addIceCandidate(data);
+      }
+    }
+  } catch (e) {
+    console.error("Signal verarbeiten:", e);
+  }
+}
+
+function onPeerState(c, uid, pc) {
+  if (call !== c || c.pcs[uid] !== pc) return;
+  const st = pc.connectionState;
+  if (st === "connected") {
+    callStatus.textContent = "Verbunden";
+  } else if (st === "disconnected") {
+    callStatus.textContent = "Verbindung instabil …";
+  } else if (st === "failed") {
+    if (!c.isGroup) {
+      leaveCall("Verbindung fehlgeschlagen – dein Netzwerk blockiert evtl. Anrufe.");
+    } else {
+      c.failed.add(uid);
+      removePeer(c, uid);
+      showToast("Verbindung zu " + (c.names[uid] || "einem Teilnehmer") + " fehlgeschlagen.");
+    }
+  }
+}
+
+function removePeer(c, uid, keepTile) {
+  const pc = c.pcs[uid];
+  if (pc) {
+    pc.onicecandidate = pc.ontrack = pc.onconnectionstatechange = null;
+    try { pc.close(); } catch (e) {}
+    delete c.pcs[uid];
+  }
+  delete c.queue[uid];
+  if (!keepTile && c.tiles[uid]) {
+    c.tiles[uid].tile.remove();
+    delete c.tiles[uid];
+  }
+}
+
+/* --- Auflegen --- */
+async function leaveCall(message, server = true) {
+  const c = call;
+  if (!c || c.ended) return;
+  c.ended = true;
+  call = null;
+  clearTimeout(c.ringTimer);
+  stopRing();
+  c.unsubs.forEach(u => { try { u(); } catch (e) {} });
+  Object.keys(c.pcs).forEach(uid => removePeer(c, uid, true));
+  c.stream.getTracks().forEach(t => t.stop());
+  videoGrid.innerHTML = "";
+  callOverlay.hidden = true;
+  audioCallBtn.disabled = false;
+  videoCallBtn.disabled = false;
+  if (message) showToast(message);
+  if (!server) return;
+
+  try {
+    const callRef = doc(db, "calls", c.id);
+    const snap = await getDoc(callRef);
+    let ended = !snap.exists() || snap.data().active === false;
+    if (!ended) {
+      const rest = (snap.data().participants || []).filter(u => u !== c.uid);
+      const patch = { participants: arrayRemove(c.uid) };
+      if (rest.length === 0 || !c.isGroup) { patch.active = false; ended = true; }
+      await updateDoc(callRef, patch);
+    }
+    if (ended) await Promise.all(c.inviteRefs.map(r => deleteDoc(r).catch(() => {})));
+  } catch (e) {
+    console.warn("Anruf beenden:", e);
+  }
+}
+
+hangupBtn.onclick = () => leaveCall("");
+muteBtn.onclick = () => {
+  if (!call) return;
+  call.muted = !call.muted;
+  call.stream.getAudioTracks().forEach(t => { t.enabled = !call.muted; });
+  muteBtn.textContent = call.muted ? "Mikro an" : "Mikro aus";
+};
+camBtn.onclick = () => {
+  if (!call) return;
+  call.camOff = !call.camOff;
+  call.stream.getVideoTracks().forEach(t => { t.enabled = !call.camOff; });
+  const self = call.tiles[call.uid];
+  if (self) self.tile.classList.toggle("hasvideo", !call.camOff);
+  camBtn.textContent = call.camOff ? "Kamera an" : "Kamera aus";
+};
+audioCallBtn.onclick = () => startCall("audio");
+videoCallBtn.onclick = () => startCall("video");
+
+/* --- Eingehende Anrufe --- */
+function setupIncomingCalls() {
+  if (callsUnsub) callsUnsub();
+  const q = query(collection(db, "invites"), where("to", "==", me.uid));
+  callsUnsub = onSnapshot(q, snap => {
+    snap.docChanges().forEach(ch => {
+      const inv = Object.assign({ id: ch.doc.id }, ch.doc.data());
+      if (ch.type === "added") onInvite(inv);
+      else if (ch.type === "removed") onInviteRemoved(inv.id);
+    });
+  }, e => console.warn("Anrufe:", e));
+}
+
+async function onInvite(inv) {
+  if (!me) return;
+  const drop = () => deleteDoc(doc(db, "invites", inv.id)).catch(() => {});
+  if (Date.now() - (inv.created || 0) > 60000) { drop(); return; }   // alt
+  if (call || incoming) { await declineInvite(inv); return; }         // besetzt
+  try {
+    const s = await getDoc(doc(db, "calls", inv.callId));
+    if (!s.exists() || s.data().active === false) { drop(); return; }
+  } catch (e) { return; }
+  if (call || incoming || !me) { await declineInvite(inv); return; }
+  incoming = inv;
+  popupCaller.textContent =
+    inv.chatType === "group" ? "Gruppenanruf von " + inv.fromName + " (" + inv.chatName + ")"
+    : inv.callType === "video" ? "Videoanruf von " + inv.fromName
+    : "Anruf von " + inv.fromName;
+  popup.style.display = "block";
+  startRing(0.8);
+}
+
+function onInviteRemoved(id) {
+  if (incoming && incoming.id === id) clearIncoming();
+}
+
+function clearIncoming() {
+  incoming = null;
+  popup.style.display = "none";
+  stopRing();
+}
+
+async function declineInvite(inv) {
+  try { await updateDoc(doc(db, "calls", inv.callId), { declined: arrayUnion(me.uid) }); } catch (e) {}
+  try { await deleteDoc(doc(db, "invites", inv.id)); } catch (e) {}
+}
+
+async function declineIncoming() {
+  const inv = incoming;
+  if (!inv) return;
+  clearIncoming();
+  await declineInvite(inv);
+}
+
+async function acceptIncoming() {
+  const inv = incoming;
+  if (!inv || call) return;
+  clearIncoming();
+  let stream = null;
+  try {
+    const callRef = doc(db, "calls", inv.callId);
+    const snap = await getDoc(callRef);
+    const d = snap.exists() ? snap.data() : null;
+    if (!d || d.active === false || !(d.participants || []).length) {
+      showToast("Der Anruf ist schon beendet.");
+      deleteDoc(doc(db, "invites", inv.id)).catch(() => {});
+      return;
+    }
+    try {
+      stream = await getMedia(d.type);
+    } catch (e) {
+      showToast(mediaErrorText(e));
+      await declineInvite(inv);
+      return;
+    }
+    beginSession(inv.callId, d, stream, false, []);
+    await updateDoc(callRef, {
+      participants: arrayUnion(me.uid),
+      ["names." + me.uid]: me.name
+    });
+    deleteDoc(doc(db, "invites", inv.id)).catch(() => {});
+  } catch (e) {
+    reportError("Anruf annehmen", e);
+    if (call) leaveCall("", false);
+    else if (stream) stream.getTracks().forEach(t => t.stop());
+  }
+}
+
+acceptBtn.onclick = acceptIncoming;
+declineBtn.onclick = declineIncoming;
+
+/* ================= GRUPPEN-MITGLIEDER ================= */
+let memberChecks = [];
+
+membersBtn.onclick = async () => {
+  if (!me || !selectedPeer || selectedPeer.type !== "group") return;
+  try {
+    const [g, users] = await Promise.all([
+      getDoc(doc(db, "groups", selectedPeer.id)),
+      getDocs(collection(db, "users"))
+    ]);
+    const members = (g.data() || {}).members || [];
+    membersList.innerHTML = "";
+    memberChecks = [];
+    users.forEach(u => {
+      if (u.id === me.uid) return;
+      const row = document.createElement("label");
+      row.className = "member";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = members.includes(u.id);
+      cb.disabled = cb.checked;
+      cb.dataset.uid = u.id;
+      const span = document.createElement("span");
+      span.textContent = u.data().name || "User";
+      row.appendChild(cb);
+      row.appendChild(span);
+      membersList.appendChild(row);
+      memberChecks.push(cb);
+    });
+    if (!memberChecks.length) {
+      membersList.textContent = "Noch keine anderen Nutzer vorhanden.";
+    }
+    membersOverlay.hidden = false;
+  } catch (e) {
+    reportError("Mitglieder laden", e);
+  }
+};
+
+membersCancel.onclick = () => { membersOverlay.hidden = true; };
+membersOverlay.addEventListener("click", e => { if (e.target === membersOverlay) membersOverlay.hidden = true; });
+
+membersSave.onclick = async () => {
+  const add = memberChecks.filter(cb => cb.checked && !cb.disabled).map(cb => cb.dataset.uid);
+  if (!add.length || !selectedPeer) { membersOverlay.hidden = true; return; }
+  try {
+    await updateDoc(doc(db, "groups", selectedPeer.id), { members: arrayUnion(...add) });
+    membersOverlay.hidden = true;
+    showToast("Mitglieder hinzugefügt.");
+  } catch (e) {
+    reportError("Mitglieder hinzufügen", e);
+  }
+};
+
+// Beim Zurückkehren zum Tab Kontakte/Gruppen aktualisieren (neue Nutzer, neue Gruppen)
+window.addEventListener("focus", () => {
+  if (me) { loadContacts(); loadGroups(); }
+});
+
+/* ================= PROFILE ================= */
+window.showProfile = () => {
+  alert("Profil: " + me.name);
+};
+
+</script>
+</body>
+</html>
+
+
+
